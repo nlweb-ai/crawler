@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Crawl Status</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .navigation {
+            margin-bottom: 20px;
+        }
+        .navigation a {
+            margin-right: 15px;
+            text-decoration: none;
+            color: #4CAF50;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #4CAF50;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        .progress {
+            min-width: 100px;
+        }
+        .site-link {
+            color: #2196F3;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        .site-link:hover {
+            text-decoration: underline;
+            color: #1976D2;
+        }
+    </style>
+</head>
+<body>
+    <div class="navigation">
+        <a href="/">Summary</a>
+        <a href="/status">Status</a>
+        <a href="/add">Add Site</a>
+        <a href="/log">Log</a>
+        <a href="/error_log">Error Log</a>
+    </div>
+    
+    <h1>Crawl Status</h1>
+    
+    <div id="statusTable">
+        <p>Loading...</p>
+    </div>
+    
+    <script>
+        async function loadStatus() {
+            try {
+                const response = await fetch('/sites');
+                const sites = await response.json();
+                
+                if (sites.length === 0) {
+                    document.getElementById('statusTable').innerHTML = '<p>No sites being crawled yet. <a href="/add">Add a site</a> to get started.</p>';
+                    return;
+                }
+                
+                let html = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Site</th>
+                                <th>Total URLs</th>
+                                <th>Crawled URLs</th>
+                                <th>Progress</th>
+                                <th>JSON Objects</th>
+                                <th>Errors</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+                
+                for (const site of sites) {
+                    const progress = site.total_urls > 0 
+                        ? Math.round((site.crawled_urls / site.total_urls) * 100) 
+                        : 0;
+                    
+                    // Format errors
+                    let errorText = '';
+                    if (site.errors && Object.keys(site.errors).length > 0) {
+                        const errorParts = [];
+                        for (const [code, count] of Object.entries(site.errors)) {
+                            errorParts.push(`${code}: ${count}`);
+                        }
+                        errorText = errorParts.join(', ');
+                    } else {
+                        errorText = 'None';
+                    }
+                    
+                    html += `
+                        <tr>
+                            <td><a href="/status/${site.name}" class="site-link">${site.name}</a></td>
+                            <td>${site.total_urls}</td>
+                            <td>${site.crawled_urls}</td>
+                            <td class="progress">${progress}%</td>
+                            <td>${site.json_objects || 0}</td>
+                            <td style="color: ${errorText === 'None' ? 'green' : 'red'}">${errorText}</td>
+                            <td>${site.paused ? 'Paused' : 'Running'}</td>
+                        </tr>
+                    `;
+                }
+                
+                html += '</tbody></table>';
+                document.getElementById('statusTable').innerHTML = html;
+            } catch (error) {
+                document.getElementById('statusTable').innerHTML = 
+                    `<p style="color: red;">Error loading status: ${error.message}</p>`;
+            }
+        }
+        
+        
+        // Load status on page load
+        loadStatus();
+        
+        // Refresh every 5 seconds
+        setInterval(loadStatus, 5000);
+    </script>
+</body>
+</html>

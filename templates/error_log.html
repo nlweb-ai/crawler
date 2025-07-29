@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Error Log</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .navigation {
+            margin-bottom: 20px;
+        }
+        .navigation a {
+            margin-right: 15px;
+            text-decoration: none;
+            color: #4CAF50;
+        }
+        .navigation a:hover {
+            text-decoration: underline;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #f44336;
+            padding-bottom: 10px;
+        }
+        .error-container {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-top: 20px;
+        }
+        .error-entry {
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            border-left: 4px solid #ccc;
+        }
+        .error-sitemap {
+            background-color: #fff3cd;
+            border-left-color: #ffc107;
+        }
+        .error-rate_limit {
+            background-color: #f8d7da;
+            border-left-color: #dc3545;
+        }
+        .error-timeout {
+            background-color: #d1ecf1;
+            border-left-color: #17a2b8;
+        }
+        .error-not_found {
+            background-color: #e2e3e5;
+            border-left-color: #6c757d;
+        }
+        .error-general {
+            background-color: #f8f9fa;
+            border-left-color: #6c757d;
+        }
+        .timestamp {
+            color: #666;
+            font-weight: bold;
+        }
+        .level {
+            font-weight: bold;
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin: 0 5px;
+        }
+        .level-ERROR {
+            background-color: #dc3545;
+            color: white;
+        }
+        .level-WARNING {
+            background-color: #ffc107;
+            color: black;
+        }
+        .stats {
+            margin: 20px 0;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        .stat-card {
+            background-color: white;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .stat-card h3 {
+            margin: 0 0 10px 0;
+            color: #555;
+            font-size: 14px;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+        }
+        .legend {
+            margin: 20px 0;
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .legend-box {
+            width: 20px;
+            height: 20px;
+            border-radius: 3px;
+            border: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <div class="navigation">
+        <a href="/">Summary</a>
+        <a href="/status">Status</a>
+        <a href="/add">Add Site</a>
+        <a href="/log">Log</a>
+        <a href="/error_log">Error Log</a>
+    </div>
+    
+    <h1>HTTP Access Errors</h1>
+    
+    <div class="stats">
+        <div class="stat-card">
+            <h3>Total Errors</h3>
+            <div class="stat-value">{{ error_entries|length }}</div>
+        </div>
+        <div class="stat-card">
+            <h3>Sitemap Errors</h3>
+            <div class="stat-value" style="color: #ffc107;">
+                {{ error_entries|selectattr('type', 'equalto', 'sitemap')|list|length }}
+            </div>
+        </div>
+        <div class="stat-card">
+            <h3>Rate Limits (429)</h3>
+            <div class="stat-value" style="color: #dc3545;">
+                {{ error_entries|selectattr('type', 'equalto', 'rate_limit')|list|length }}
+            </div>
+        </div>
+        <div class="stat-card">
+            <h3>Timeouts</h3>
+            <div class="stat-value" style="color: #17a2b8;">
+                {{ error_entries|selectattr('type', 'equalto', 'timeout')|list|length }}
+            </div>
+        </div>
+    </div>
+    
+    <div class="legend">
+        <div class="legend-item">
+            <div class="legend-box" style="background-color: #fff3cd;"></div>
+            <span>Sitemap Errors</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-box" style="background-color: #f8d7da;"></div>
+            <span>Rate Limit (429)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-box" style="background-color: #d1ecf1;"></div>
+            <span>Timeout</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-box" style="background-color: #e2e3e5;"></div>
+            <span>Not Found (404)</span>
+        </div>
+    </div>
+    
+    <div class="error-container">
+        {% if error_entries %}
+            {% for entry in error_entries %}
+                <div class="error-entry error-{{ entry.type }}">
+                    <span class="timestamp">{{ entry.timestamp }}</span>
+                    <span class="level level-{{ entry.level }}">{{ entry.level }}</span>
+                    {{ entry.message }}
+                </div>
+            {% endfor %}
+        {% else %}
+            <p>No errors logged yet.</p>
+        {% endif %}
+    </div>
+    
+    <script>
+        // Auto-refresh every 10 seconds
+        setTimeout(() => {
+            location.reload();
+        }, 10000);
+    </script>
+</body>
+</html>
