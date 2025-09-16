@@ -13,7 +13,7 @@ import asyncio
 import threading
 import logging
 
-from config import CONFIG
+from core.config import CONFIG
 
 # Configure main logger
 logger = logging.getLogger('crawler')

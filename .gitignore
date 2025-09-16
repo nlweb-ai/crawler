@@ -1,6 +1,16 @@
 .vscode
+myenv/
+.env
+*/.env
+
+# Ignore data and logs
+data/
 code/data/
 code/logs/
-myenv/
-code/__pycache__
-.env
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+

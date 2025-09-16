@@ -39,6 +39,7 @@ class Crawler:
         self.database_queue = asyncio.Queue() # Queue for database processing
 
         self.processed_embeddings = {}  # site_name: set of processed JSON keys
+        self.processed_keys = {}  # site_name: set of processed embeddings keys
         # Chrome user agent
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -283,6 +284,102 @@ class Crawler:
                 self.error_logger.error(f"Error in embeddings monitor thread | {str(e)}")
                 time.sleep(30)
 
+    def load_processed_keys(self, site_name):
+        """Load set of already processed keys for a site."""
+        if site_name not in self.processed_keys:
+            self.processed_keys[site_name] = set()
+            keys_file = os.path.join('data', 'keys', f"{site_name}.json")
+            if os.path.exists(keys_file):
+                try:
+                    with open(keys_file, 'r') as f:
+                        data = json.load(f)
+                        if isinstance(data, list):
+                            # Extract keys from embeddings data
+                            self.processed_keys[site_name] = {item['key'] for item in data if 'key' in item}
+                except Exception:
+                    pass
+
+    def save_processed_keys(self, site_name, keys):
+        """Save processed keys (after uploading to DB) to a JSON file."""
+        keys_dir = os.path.join('data', 'keys')
+        os.makedirs(keys_dir, exist_ok=True)
+        keys_file = os.path.join(keys_dir, f"{site_name}.json")
+
+        existing_data = []
+        if os.path.exists(keys_file):
+            try:
+                with open(keys_file, 'r') as f:
+                    existing_data = json.load(f)
+            except Exception:
+                existing_data = []
+
+        # append new keys
+        for key in keys:
+            existing_data.append({'key': key})
+
+        with open(keys_file, 'w') as f:
+            json.dump(existing_data, f, indent=2)
+
+        # also update in-memory cache
+        if site_name not in self.processed_keys:
+            self.processed_keys[site_name] = set()
+        self.processed_keys[site_name].update(keys)
+
+    def database_monitor_thread(self):
+        """Thread that monitors embeddings files and queues items for database insertion."""
+        last_check = {}
+        
+        while self.running:
+            try:
+                json_dir = os.path.join('data', 'embeddings')
+                if os.path.exists(json_dir):
+                    for filename in os.listdir(json_dir):
+                        if filename.endswith('.json'):
+                            filepath = os.path.join(json_dir, filename)
+                            site_name = filename[:-5]
+                            
+                            # Skip deleted sites
+                            if site_name in self.deleted_sites:
+                                continue
+                            
+                            # Check if file is new or modified
+                            mtime = os.path.getmtime(filepath)
+                            if site_name not in last_check or mtime > last_check[site_name]:
+                                last_check[site_name] = mtime
+
+                                # Load processed keys for this site
+                                self.load_processed_keys(site_name)
+                                
+                                # Read embeddings file and find items needing embeddings
+                                try:
+                                    with open(filepath, 'r') as f:
+                                        embeddings_objects = json.load(f)
+                                    
+                                    # Find objects that haven't been processed
+                                    unprocessed = []
+                                    for obj in embeddings_objects:
+                                        if 'key' in obj and obj['key'] not in self.processed_keys[site_name]:
+                                            unprocessed.append(obj)
+                                    
+                                    if unprocessed:
+                                        # Queue them for processing in batches
+                                        for i in range(0, len(unprocessed), 100):
+                                            batch = unprocessed[i:i+100]
+                                            # Add to queue (will be processed by async worker)
+                                            if self.loop:
+                                                asyncio.run_coroutine_threadsafe(
+                                                    self.database_queue.put((site_name, batch)),
+                                                    self.loop
+                                                )
+                                except Exception as e:
+                                    self.error_logger.error(f"Error processing embeddings for database | {site_name} | {str(e)}")
+                
+                time.sleep(30)  # Check every 30 seconds
+            except Exception as e:
+                self.error_logger.error(f"Error in database monitor thread | {str(e)}")
+                time.sleep(30)
+
+
     def get_site_status(self, site_name):
         """Get current status for a site."""
         status_file = os.path.join('data', 'status', f"{site_name}.json")
@@ -347,6 +444,18 @@ class Crawler:
         if site_name in self.json_type_counts:
             del self.json_type_counts[site_name]
         # Suppressed: print(f"Site {site_name} marked for deletion in crawler")
+
+        # Delete documents from database
+        from core.retriever import delete_documents_by_site
+
+        future = asyncio.run_coroutine_threadsafe(
+            delete_documents_by_site(site_name),
+            self.loop,
+        )
+        # Optional: wait for result
+        result = future.result()
+
+
     
     def track_error(self, site_name, error_code):
         """Track error counts per site."""
@@ -509,9 +618,112 @@ class Crawler:
                             
             except json.JSONDecodeError:
                 pass
-        
+
+        # --- If nothing was found, try to synthesize as document may not have jsonld ---
+        if not schema_data:
+            synthesized = self.synthesize_schema(soup, url)
+            if synthesized:
+                schema_data.append(synthesized)
+
         return schema_data
-    
+
+    def synthesize_schema(self, soup, url):
+        """Build an enriched JSON-LD object from meta tags / OG tags."""
+
+        # --- Title / description ---
+        title = soup.title.string.strip() if soup.title else None
+
+        desc = None
+        desc_tag = soup.find("meta", attrs={"name": "description"})
+        if desc_tag and desc_tag.get("content"):
+            desc = desc_tag["content"]
+
+        # OpenGraph fallbacks
+        og_title = soup.find("meta", property="og:title")
+        if og_title and og_title.get("content"):
+            title = title or og_title["content"]
+
+        og_desc = soup.find("meta", property="og:description")
+        if og_desc and og_desc.get("content"):
+            desc = desc or og_desc["content"]
+
+        # --- Image handling (with width/height if present) ---
+        image = None
+        og_image = soup.find("meta", property="og:image")
+        if og_image and og_image.get("content"):
+            image = {
+                "@type": "ImageObject",
+                "url": og_image["content"]
+            }
+            og_width = soup.find("meta", property="og:image:width")
+            og_height = soup.find("meta", property="og:image:height")
+            if og_width and og_width.get("content"):
+                image["width"] = int(og_width["content"])
+            if og_height and og_height.get("content"):
+                image["height"] = int(og_height["content"])
+
+        # --- Schema type heuristic ---
+        if soup.find("meta", property="article:published_time"):
+            schema_type = "BlogPosting"
+        else:
+            schema_type = "WebPage"
+
+        # --- Publication dates ---
+        pub_date = soup.find("meta", property="article:published_time")
+        mod_date = soup.find("meta", property="article:modified_time")
+
+        # --- Author ---
+        author_name = None
+        author_tag = (
+            soup.find("meta", property="article:author")
+            or soup.find("meta", attrs={"name": "author"})
+        )
+        if author_tag and author_tag.get("content"):
+            author_name = author_tag["content"]
+
+        # --- Publisher ---
+        publisher = None
+        og_site = soup.find("meta", property="og:site_name")
+        if og_site and og_site.get("content"):
+            publisher = {
+                "@type": "Organization",
+                "name": og_site["content"]
+            }
+            # Attempt to find logo (if available)
+            logo_tag = soup.find("meta", property="og:logo")
+            if logo_tag and logo_tag.get("content"):
+                publisher["logo"] = {
+                    "@type": "ImageObject",
+                    "url": logo_tag["content"]
+                }
+
+        # --- Construct JSON-LD ---
+        synthesized = {
+            "url": url,
+            "timestamp": datetime.now().isoformat(),
+            "@context": "https://schema.org",
+            "@type": schema_type,
+            "mainEntityOfPage": {
+                "@type": "WebPage",
+                "@id": url
+            },
+            "headline": title,
+            "description": desc,
+        }
+
+        if image:
+            synthesized["image"] = image
+        if pub_date and pub_date.get("content"):
+            synthesized["datePublished"] = pub_date["content"]
+        if mod_date and mod_date.get("content"):
+            synthesized["dateModified"] = mod_date["content"]
+        if author_name:
+            synthesized["author"] = {"@type": "Person", "name": author_name}
+        if publisher:
+            synthesized["publisher"] = publisher
+
+        return synthesized
+
     def save_schema_org(self, site_name, schema_data):
         """Save schema.org data to JSON file."""
         if not schema_data:
@@ -745,7 +957,7 @@ class Crawler:
                 if texts:
                     try:
                         # Import get_embedding function (assuming it's available)
-                        from embeddings_utils.embedding import get_embedding
+                        from core.embeddings_utils.embedding import get_embedding
                         
                         # Get embeddings for batch
                         embeddings = []
@@ -779,26 +991,51 @@ class Crawler:
         print(f"Database worker started")
         while self.running:
             try:
-                # Get a file path from the database queue
-                file_path = await self.database_queue.get()
 
-                print(f"Database worker is processing JSON file: {file_path}")
+                from core.retriever import upload_documents
+
+                # Get a batch from the database queue
+                batch = await self.database_queue.get()
+
+                print(f"Database worker is processing embeddings file for : {batch[0]}")
 
                 # Extract site name from the file path
                 # Assuming file path is like: data/json/site_name.json
-                site_name = os.path.basename(file_path).replace('.json', '')
+                site_name = batch[0]
+
+                # Assuming your original data is in a variable called 'batch'
+                transformed_documents = []
+                for doc in batch[1]:
+                    # Create a new document dictionary
+                    new_doc = {
+                        'url': doc['key'],
+                        'embedding': doc['embedding'],
+                        'timestamp': doc['timestamp'],
+                        'site': site_name,   # <--- explicitly set here
+                        'metadata': {
+                            **doc['metadata'],
+                            'site': site_name
+                        },
+                        'schema_json': doc['metadata']
+                    }
+                    transformed_documents.append(new_doc)
 
                 try:
+                    # Upload to database
+                    # Use specified database or default
+                    print(f"\n📤 Uploading {len(transformed_documents)} documents to local Qdrant...")
+                    upload_count = await upload_documents(transformed_documents, endpoint_name="qdrant_local")
+                    print(f"✅ Uploaded {upload_count} documents")
+
+                    # Save processed keys so we don't re-upload
+                    keys = [doc['url'] for doc in transformed_documents]
+                    self.save_processed_keys(site_name, keys)
+
                     # Process the JSON file with embeddings and upload to database
-                    documents_loaded = await self.process_json_file_with_embeddings(
-                        json_file_path=file_path,
-                        site=site_name,
-                        batch_size=100
-                    )
-                    print(f"Successfully processed {documents_loaded} documents from {file_path}")
+                    print(f"Successfully processed documents_loaded documents from {site_name}")
 
                 except Exception as e:
-                    print(f"Error processing {file_path}: {str(e)}")
+                    print(f"Error processing embeddings for {site_name}: {str(e)}")
                     import traceback
                     traceback.print_exc()
 
@@ -911,7 +1148,12 @@ class Crawler:
         embeddings_thread = threading.Thread(target=self.embeddings_monitor_thread)
         embeddings_thread.daemon = True
         embeddings_thread.start()
-        
+
+        # Start database monitor thread
+        database_thread = threading.Thread(target=self.database_monitor_thread)
+        database_thread.daemon = True
+        database_thread.start()
+
         # Process any pending URLs that were added before loop was ready
         # (No longer needed with site queues)
 
