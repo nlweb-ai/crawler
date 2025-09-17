@@ -1,0 +1,20 @@
+# Development overrides for docker-compose
+# This file is automatically loaded by docker-compose and provides development-specific settings
+
+services:
+  crawler-app:
+    # Enable development mode
+    environment:
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+    # Mount source code for live reloading during development
+    volumes:
+      - ./config:/app/config
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./code:/app/code
+      - ./templates:/app/templates
+      - ./run.py:/app/run.py
+      - ./setup_submodule_path.py:/app/setup_submodule_path.py
+    # Override command for development
+    command: ["python", "run.py"]
