@@ -1,10 +1,14 @@
 services:
   # Web Crawler Application
   crawler-app:
-    build: .
-    container_name: nlweb-crawler-app
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nlweb-crawler
     ports:
       - "5000:5000"
+    env_file:
+      - .env
     volumes:
       # Mount config directory to host for easy configuration changes
       - ./config:/app/config
@@ -15,34 +19,14 @@ services:
     environment:
       # Point to the Qdrant container instead of localhost
       - QDRANT_URL=http://qdrant:6333
-      - QDRANT_API_KEY=
+      - QDRANT_API_KEY=supersecret123
       # Add any other environment variables your app needs
-      - FLASK_ENV=production
-      - PYTHONPATH=/app:/app/code:/app/nlweb-submodule/code/python
-    networks:
-      - crawler-network
-    depends_on:
-      - qdrant
+      - FLASK_ENV=development
+      - PYTHONPATH=/app:/app
     restart: unless-stopped
-
-  # Qdrant Vector Database
-  qdrant:
-    image: qdrant/qdrant:latest
-    container_name: nlweb-qdrant
-    ports:
-      - "6333:6333"
-      - "6334:6334"
-    volumes:
-      - qdrant_data:/qdrant/storage
     networks:
-      - crawler-network
-    environment:
-      QDRANT__SERVICE__API_KEY: ""
-    restart: unless-stopped
+      - qdrant-net
 
 networks:
-  crawler-network:
-    driver: bridge
-
-volumes:
-  qdrant_data:
+  qdrant-net:
+    external: true     # don’t recreate, reuse the existing network

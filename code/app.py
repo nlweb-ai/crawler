@@ -520,8 +520,13 @@ def delete_site_data(site_name):
     if os.path.exists(json_file):
         os.remove(json_file)
     
+    # Delete embeddings file
+    embeddings_file = os.path.join('data', 'embeddings', f"{site_name}.json")
+    if os.path.exists(embeddings_file):
+        os.remove(embeddings_file)
+    
     # Delete keys file
-    keys_file = os.path.join('data', 'keys', f"{site_name}.txt")
+    keys_file = os.path.join('data', 'keys', f"{site_name}.json")
     if os.path.exists(keys_file):
         os.remove(keys_file)
     

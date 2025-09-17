@@ -122,7 +122,7 @@ crawler/
 
 ```bash
 git clone  https://github.com/nlweb-ai/crawler.git
-git cd crawler
+cd crawler
 git submodule update --init --recursive
 ```
 

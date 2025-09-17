@@ -30,4 +30,4 @@ if __name__ == '__main__':
     cli.show_server_banner = lambda *x: None
     
     # Run the Flask app
-    app.run(debug=False, threaded=True, use_reloader=False)
+    app.run(host='0.0.0.0', debug=False, threaded=True, use_reloader=False)

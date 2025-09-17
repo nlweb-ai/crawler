@@ -29,6 +29,7 @@ RUN mkdir -p data/docs data/embeddings data/json data/json_with_embeddings data/
 ENV PYTHONPATH=/app:/app/code:/app/nlweb-submodule/code/python
 ENV FLASK_APP=run.py
 ENV FLASK_ENV=production
+ENV NLWEB_CONFIG_DIR=/app/config
 
 # Expose the Flask port
 EXPOSE 5000
