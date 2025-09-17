@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import asyncio
 import aiohttp
@@ -11,6 +12,10 @@ import time
 import random
 import logging
 from collections import deque
+
+# Set up the NLWeb submodule path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))  # Add project root to path
+import setup_submodule_path  # This automatically sets up the submodule path
 
 class Crawler:
     def __init__(self):
@@ -956,8 +961,8 @@ class Crawler:
                 
                 if texts:
                     try:
-                        # Import get_embedding function (assuming it's available)
-                        from core.embeddings_utils.embedding import get_embedding
+                        # Import get_embedding function from the submodule
+                        from core.embedding import get_embedding
                         
                         # Get embeddings for batch
                         embeddings = []

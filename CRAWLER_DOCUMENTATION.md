@@ -90,6 +90,10 @@ crawler/
    - Extract schema.org JSON-LD
    - Save HTML to docs/{site_name}/
    - Append JSON-LD to json/{site_name}.json
+   - Encodes embeddings using embedding provider
+   - Append embedding to embeddings/{site_name}.json
+   - Stores vectors in vector store using retrieval provider
+   - Append keys of completed vectors into keys/{site_name}.json
    - Update status file
 
 ## Current Implementation Status
@@ -101,39 +105,56 @@ crawler/
 - ✅ Status file management
 - ✅ URL collection and storage
 - ✅ Basic crawler structure
+- ✅ Schema.org extraction (and synthesizing from meta tags) implemented
+- ✅ URL reader thread monitoring for new files
+- ✅ Worker thread pool fully implemented - now encoding embeddings & uploading to database
+- ✅ Pause/resume functionality in crawler 
+- ✅ Deletion of site from crawler - deletes sites from vector store 
 
 ### Missing/Incomplete:
-- ❌ URL reader thread not monitoring for new files
-- ❌ Worker thread pool not fully implemented
-- ❌ Schema.org extraction not implemented
 - ❌ Duplicate detection not working
 - ❌ Site-based request throttling not implemented
 - ❌ Pause/resume functionality in crawler not connected
 
 ## Usage Instructions
 
-1. **Start the Flask app**:
+1. **Clone the repo and init the submodule**:
+
+```bash
+git clone  https://github.com/nlweb-ai/crawler.git
+git cd crawler
+git submodule update --init --recursive
+```
+
+Or, in one go:
+
+```bash
+git clone --recurse-submodules  https://github.com/nlweb-ai/crawler.git
+```
+
+2. **Start the Flask app**:
    ```bash
-   python app.py
+   python run.py
    ```
 
-2. **Add sites to crawl**:
+3. **Add sites to crawl**:
    - Navigate to http://localhost:5000
    - Enter website URL or sitemap URL
    - Optionally add filter text
    - Submit to collect URLs
 
-3. **Monitor status**:
+4. **Monitor status**:
    - Check /status page for all sites
    - View individual site status at /status/<site_name>
 
-4. **Run the crawler**:
-   ```bash
-   python crawler.py
-   ```
 
 ## Notes for Resume
 - The system is designed for defensive security analysis and content monitoring
 - URLs are collected first, then crawled asynchronously
 - Each site maintains independent status and can be paused
 - The crawler respects robots.txt by using sitemaps for URL discovery
+
+### Getting Updates from Upstream for NLWeb
+```bash
+git submodule update --remote nlweb-submodule
+```

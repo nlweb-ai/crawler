@@ -1,0 +1,3 @@
+[submodule "nlweb-submodule"]
+	path = nlweb-submodule
+	url = https://github.com/nlweb-ai/NLWeb.git
