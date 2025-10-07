@@ -8,7 +8,11 @@ import sys
 import os
 
 # Add code directory to Python path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'code'))
+code_dir = os.path.join(os.path.dirname(__file__), 'code')
+sys.path.insert(0, code_dir)
+
+# Set up the NLWeb submodule path for imports
+import setup_submodule_path  # This automatically sets up the submodule path
 
 # Import and run the Flask app
 from app import app, ensure_directories_exist, start_crawler
@@ -26,4 +30,4 @@ if __name__ == '__main__':
     cli.show_server_banner = lambda *x: None
     
     # Run the Flask app
-    app.run(debug=False, threaded=True, use_reloader=False)
+    app.run(host='0.0.0.0', debug=False, threaded=True, use_reloader=False)

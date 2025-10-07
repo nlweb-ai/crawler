@@ -1,0 +1,32 @@
+services:
+  # Web Crawler Application
+  crawler-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nlweb-crawler
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    volumes:
+      # Mount config directory to host for easy configuration changes
+      - ./config:/app/config
+      # Mount data directory to host for accessing embeddings, JSON, etc.
+      - ./data:/app/data
+      # Mount logs directory to host for log access
+      - ./logs:/app/logs
+    environment:
+      # Point to the Qdrant container instead of localhost
+      - QDRANT_URL=http://qdrant:6333
+      - QDRANT_API_KEY=supersecret123
+      # Add any other environment variables your app needs
+      - FLASK_ENV=development
+      - PYTHONPATH=/app:/app
+    restart: unless-stopped
+    networks:
+      - qdrant-net
+
+networks:
+  qdrant-net:
+    external: true     # don’t recreate, reuse the existing network
