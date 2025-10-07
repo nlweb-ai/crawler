@@ -251,7 +251,7 @@ python -m pytest tests/
 # Test with real sitemap
 python run.py
 # Navigate to http://localhost:5000
-# Add test site: dublingalwaygreenway.com
+# Add test site: example.com/sitemap.xml
 ```
 
 ### Debugging
