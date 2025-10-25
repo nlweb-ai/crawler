@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Files Table - Schema Crawler</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: #2c3e50;
+            color: white;
+            padding: 1.5rem 0;
+            margin-bottom: 2rem;
+        }
+
+        h1 { margin-bottom: 0.5rem; }
+
+        .nav {
+            margin-top: 1rem;
+        }
+
+        .nav a {
+            color: #3498db;
+            text-decoration: none;
+            margin-right: 1rem;
+        }
+
+        .nav a:hover {
+            text-decoration: underline;
+        }
+
+        .section {
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #2c3e50;
+            position: sticky;
+            top: 0;
+        }
+
+        tr:hover { background: #f8f9fa; }
+
+        .status-active { color: #27ae60; font-weight: bold; }
+        .status-inactive { color: #e74c3c; }
+
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 3px;
+            font-size: 0.85rem;
+        }
+
+        .badge-manual { background: #3498db; color: white; }
+        .badge-auto { background: #95a5a6; color: white; }
+
+        .url {
+            font-family: monospace;
+            font-size: 0.9rem;
+            word-break: break-all;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #3498db;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+
+        .stat-label {
+            font-size: 0.85rem;
+            opacity: 0.9;
+            margin-top: 0.25rem;
+        }
+
+        button {
+            padding: 0.5rem 1rem;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-bottom: 1rem;
+        }
+
+        button:hover { background: #2980b9; }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>Files Table</h1>
+            <p>Complete dump of the files table</p>
+            <div class="nav">
+                <a href="/">← Back to Admin</a>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="stats" id="stats">
+            <div class="stat-card">
+                <div class="stat-value" id="totalFiles">0</div>
+                <div class="stat-label">Total Files</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="activeFiles">0</div>
+                <div class="stat-label">Active Files</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="manualFiles">0</div>
+                <div class="stat-label">Manual Files</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="crawledFiles">0</div>
+                <div class="stat-label">Crawled Files</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <button onclick="loadFiles()">Refresh</button>
+
+            <table id="filesTable">
+                <thead>
+                    <tr>
+                        <th>Site URL</th>
+                        <th>File URL</th>
+                        <th>Schema Map</th>
+                        <th>Active</th>
+                        <th>Type</th>
+                        <th>Items</th>
+                        <th>IDs</th>
+                        <th>Last Read</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="filesBody">
+                    <tr><td colspan="9" class="loading">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin + '/api';
+
+        async function loadFiles() {
+            try {
+                const response = await fetch(`${API_BASE}/files`);
+                const files = await response.json();
+
+                const tbody = document.getElementById('filesBody');
+
+                if (files.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="9" style="text-align: center;">No files found</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = files.map(file => {
+                    const lastRead = file.last_read_time
+                        ? new Date(file.last_read_time).toLocaleString()
+                        : 'Never';
+
+                    const viewIdsBtn = file.id_count > 0
+                        ? `<button onclick='viewIds("${encodeURIComponent(file.file_url)}")' style="padding: 0.25rem 0.5rem; font-size: 0.85rem;">View IDs</button>`
+                        : '-';
+
+                    return `
+                        <tr>
+                            <td class="url">${file.site_url}</td>
+                            <td class="url">${file.file_url}</td>
+                            <td class="url">${file.schema_map || '-'}</td>
+                            <td class="${file.is_active ? 'status-active' : 'status-inactive'}">
+                                ${file.is_active ? 'Yes' : 'No'}
+                            </td>
+                            <td>
+                                <span class="badge ${file.is_manual ? 'badge-manual' : 'badge-auto'}">
+                                    ${file.is_manual ? 'Manual' : 'Auto'}
+                                </span>
+                            </td>
+                            <td>${file.number_of_items !== null ? file.number_of_items : '-'}</td>
+                            <td>${file.id_count || 0}</td>
+                            <td>${lastRead}</td>
+                            <td>${viewIdsBtn}</td>
+                        </tr>
+                    `;
+                }).join('');
+
+                // Update stats
+                const totalFiles = files.length;
+                const activeFiles = files.filter(f => f.is_active).length;
+                const manualFiles = files.filter(f => f.is_manual).length;
+                const crawledFiles = files.filter(f => f.number_of_items !== null).length;
+
+                document.getElementById('totalFiles').textContent = totalFiles;
+                document.getElementById('activeFiles').textContent = activeFiles;
+                document.getElementById('manualFiles').textContent = manualFiles;
+                document.getElementById('crawledFiles').textContent = crawledFiles;
+
+            } catch (error) {
+                console.error('Failed to load files:', error);
+                document.getElementById('filesBody').innerHTML =
+                    '<tr><td colspan="9" style="text-align: center; color: red;">Error loading files</td></tr>';
+            }
+        }
+
+        async function viewIds(fileUrl) {
+            try {
+                const response = await fetch(`${API_BASE}/files/${encodeURIComponent(fileUrl)}/ids`);
+                const data = await response.json();
+
+                const idsList = data.ids.length > 0
+                    ? data.ids.map((id, idx) => `${idx + 1}. ${id}`).join('\n')
+                    : 'No IDs found';
+
+                alert(`IDs for file:\n${data.file_url}\n\nCount: ${data.count}\n\n${idsList}`);
+            } catch (error) {
+                console.error('Failed to load IDs:', error);
+                alert('Error loading IDs for this file');
+            }
+        }
+
+        // Initial load
+        document.addEventListener('DOMContentLoaded', loadFiles);
+
+        // Auto-refresh every 30 seconds
+        setInterval(loadFiles, 30000);
+    </script>
+</body>
+</html>

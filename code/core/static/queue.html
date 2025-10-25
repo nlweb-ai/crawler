@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Queue History - Schema Crawler</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: #2c3e50;
+            color: white;
+            padding: 1.5rem 0;
+            margin-bottom: 2rem;
+        }
+
+        h1 { margin-bottom: 0.5rem; }
+
+        .nav {
+            margin-top: 1rem;
+        }
+
+        .nav a {
+            color: #3498db;
+            text-decoration: none;
+            margin-right: 1rem;
+        }
+
+        .nav a:hover {
+            text-decoration: underline;
+        }
+
+        .section {
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #2c3e50;
+            position: sticky;
+            top: 0;
+        }
+
+        tr:hover { background: #f8f9fa; }
+
+        .status-success { color: #27ae60; font-weight: bold; }
+        .status-failure { color: #e74c3c; font-weight: bold; }
+
+        .url {
+            font-family: monospace;
+            font-size: 0.9rem;
+            word-break: break-all;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #3498db;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+
+        .stat-label {
+            font-size: 0.85rem;
+            opacity: 0.9;
+            margin-top: 0.25rem;
+        }
+
+        button {
+            padding: 0.5rem 1rem;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-bottom: 1rem;
+        }
+
+        button:hover { background: #2980b9; }
+
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 3px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .badge-process { background: #3498db; color: white; }
+        .badge-remove { background: #e74c3c; color: white; }
+
+        .error-msg {
+            color: #e74c3c;
+            font-size: 0.9rem;
+            font-style: italic;
+        }
+
+        .timestamp {
+            font-size: 0.9rem;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>Queue History</h1>
+            <p>Log of all items added to the job queue</p>
+            <div class="nav">
+                <a href="/">← Back to Admin</a>
+                <a href="/files.html">Files Table</a>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="stats" id="stats">
+            <div class="stat-card">
+                <div class="stat-value" id="totalOps">0</div>
+                <div class="stat-label">Total Operations</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="successOps">0</div>
+                <div class="stat-label">Successful</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="failedOps">0</div>
+                <div class="stat-label">Failed</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="queuedFiles">0</div>
+                <div class="stat-label">Files Queued</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <button onclick="loadHistory()">Refresh</button>
+
+            <table id="historyTable">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Operation</th>
+                        <th>Status</th>
+                        <th>Site</th>
+                        <th>Schema Map</th>
+                        <th>File URL</th>
+                        <th>Error</th>
+                    </tr>
+                </thead>
+                <tbody id="historyBody">
+                    <tr><td colspan="7" class="loading">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin + '/api';
+
+        async function loadHistory() {
+            try {
+                const response = await fetch(`${API_BASE}/queue/history`);
+                const history = await response.json();
+
+                const tbody = document.getElementById('historyBody');
+
+                if (history.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">No queue history yet</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = history.map(entry => {
+                    const timestamp = new Date(entry.timestamp).toLocaleString();
+                    const statusClass = entry.success ? 'status-success' : 'status-failure';
+                    const statusText = entry.success ? '✓ Success' : '✗ Failed';
+
+                    const operationBadge = entry.operation.includes('removed')
+                        ? '<span class="badge badge-remove">Remove</span>'
+                        : '<span class="badge badge-process">Process</span>';
+
+                    const site = entry.job?.site || '-';
+                    const schemaMap = entry.job?.schema_map || '-';
+                    const fileUrl = entry.job?.file_url || '-';
+                    const error = entry.error || '';
+
+                    return `
+                        <tr>
+                            <td class="timestamp">${timestamp}</td>
+                            <td>${operationBadge}</td>
+                            <td class="${statusClass}">${statusText}</td>
+                            <td class="url">${site}</td>
+                            <td class="url">${schemaMap}</td>
+                            <td class="url">${fileUrl}</td>
+                            <td class="error-msg">${error}</td>
+                        </tr>
+                    `;
+                }).join('');
+
+                // Update stats
+                const totalOps = history.length;
+                const successOps = history.filter(e => e.success).length;
+                const failedOps = history.filter(e => !e.success).length;
+                const queuedFiles = history.filter(e => e.operation === 'queue_file' && e.success).length;
+
+                document.getElementById('totalOps').textContent = totalOps;
+                document.getElementById('successOps').textContent = successOps;
+                document.getElementById('failedOps').textContent = failedOps;
+                document.getElementById('queuedFiles').textContent = queuedFiles;
+
+            } catch (error) {
+                console.error('Failed to load queue history:', error);
+                document.getElementById('historyBody').innerHTML =
+                    '<tr><td colspan="7" style="text-align: center; color: red;">Error loading queue history</td></tr>';
+            }
+        }
+
+        // Initial load
+        document.addEventListener('DOMContentLoaded', loadHistory);
+
+        // Auto-refresh every 10 seconds
+        setInterval(loadHistory, 10000);
+    </script>
+</body>
+</html>

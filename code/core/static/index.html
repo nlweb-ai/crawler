@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schema Crawler Admin</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: #2c3e50;
+            color: white;
+            padding: 1.5rem 0;
+            margin-bottom: 2rem;
+        }
+
+        h1 { margin-bottom: 0.5rem; }
+        h2 {
+            color: #2c3e50;
+            margin: 1.5rem 0 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #3498db;
+        }
+
+        .section {
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .form-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 1rem;
+            align-items: center;
+        }
+
+        input[type="text"], input[type="url"], input[type="number"] {
+            flex: 1;
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        button {
+            padding: 0.5rem 1rem;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+
+        button:hover { background: #2980b9; }
+        button.danger { background: #e74c3c; }
+        button.danger:hover { background: #c0392b; }
+        button.success { background: #27ae60; }
+        button.success:hover { background: #229954; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        tr:hover { background: #f8f9fa; }
+
+        .status-active { color: #27ae60; }
+        .status-inactive { color: #e74c3c; }
+
+        .alert {
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-radius: 4px;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .loading {
+            display: inline-block;
+            margin-left: 10px;
+            color: #3498db;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+            margin-top: 0.5rem;
+        }
+
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem;
+            margin-bottom: 0.5rem;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+
+        .file-url {
+            flex: 1;
+            font-family: monospace;
+            font-size: 0.9rem;
+            word-break: break-all;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 3px;
+            font-size: 0.85rem;
+            margin-left: 0.5rem;
+        }
+
+        .badge-manual { background: #3498db; color: white; }
+        .badge-auto { background: #95a5a6; color: white; }
+
+        /* Queue Status Styles */
+        .queue-summary {
+            display: flex;
+            gap: 2rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .queue-stat {
+            flex: 1;
+            text-align: center;
+            padding: 1rem;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .queue-stat .stat-label {
+            display: block;
+            font-size: 0.85rem;
+            color: #666;
+            margin-bottom: 0.5rem;
+        }
+
+        .queue-stat .stat-value {
+            display: block;
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+
+        .queue-stat .stat-value.pending { color: #f39c12; }
+        .queue-stat .stat-value.processing { color: #3498db; }
+        .queue-stat .stat-value.failed { color: #e74c3c; }
+
+        .jobs-list table {
+            width: 100%;
+            margin-top: 1rem;
+        }
+
+        .jobs-list h3 {
+            color: #2c3e50;
+            margin-bottom: 1rem;
+        }
+
+        .badge-pending { background: #f39c12; color: white; }
+        .badge-processing { background: #3498db; color: white; }
+        .badge-failed { background: #e74c3c; color: white; }
+
+        .no-jobs {
+            text-align: center;
+            padding: 2rem;
+            color: #95a5a6;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>Schema Crawler Admin</h1>
+            <p>Manage sites and schema files for crawling</p>
+            <p style="margin-top: 0.5rem; font-size: 0.9rem; opacity: 0.9;" id="masterStatus">
+                Master started: <span id="masterStartTime">-</span> | Uptime: <span id="masterUptime">-</span>
+            </p>
+            <p style="margin-top: 0.5rem;">
+                <a href="/files.html" style="color: #3498db; margin-right: 1rem;">View Files Table →</a>
+                <a href="/queue.html" style="color: #3498db; margin-right: 1rem;">View Queue History →</a>
+                <a href="/workers.html" style="color: #3498db; margin-right: 1rem;">View Workers →</a>
+                <a href="/fetch-log.html" style="color: #3498db;">View Fetch Log →</a>
+            </p>
+        </div>
+    </header>
+
+    <div class="container">
+        <div id="alerts"></div>
+
+        <!-- Statistics -->
+        <div class="stats" id="stats">
+            <div class="stat-card">
+                <div class="stat-value" id="totalSites">0</div>
+                <div class="stat-label">Total Sites</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="totalFiles">0</div>
+                <div class="stat-label">Schema Files</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="totalIds">0</div>
+                <div class="stat-label">Unique IDs</div>
+            </div>
+        </div>
+
+        <!-- Queue Status Section -->
+        <div class="section">
+            <h2>Queue Status</h2>
+            <div id="queueStatus">
+                <div class="loading">Loading queue status...</div>
+            </div>
+        </div>
+
+        <!-- Add Site Section -->
+        <div class="section">
+            <h2>Add New Site</h2>
+            <form id="addSiteForm" class="form-group">
+                <input type="url" id="siteUrl" placeholder="https://example.com" required>
+                <input type="number" id="intervalHours" placeholder="Interval (hours)" value="24" min="1" style="max-width: 150px;">
+                <button type="submit">Add Site</button>
+            </form>
+        </div>
+
+        <!-- Add Manual Schema Map Section -->
+        <div class="section">
+            <h2>Add Manual Schema Map</h2>
+            <p style="font-size: 0.9rem; color: #666; margin-bottom: 1rem;">
+                Provide a schema_map.xml or sitemap URL. The system will fetch it, extract all schema files, and queue them for processing.
+            </p>
+            <form id="addFileForm" class="form-group">
+                <input type="url" id="fileSiteUrl" placeholder="Site URL (e.g., https://example.com)" required>
+                <input type="url" id="fileUrl" placeholder="Schema Map URL (e.g., https://example.com/schema_map.xml)" required>
+                <button type="submit">Add Schema Map</button>
+            </form>
+        </div>
+
+        <!-- Sites List -->
+        <div class="section">
+            <h2>Monitored Sites</h2>
+            <table id="sitesTable">
+                <thead>
+                    <tr>
+                        <th>Site URL</th>
+                        <th>Status</th>
+                        <th>Interval</th>
+                        <th>Last Processed</th>
+                        <th>Files</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="sitesBody">
+                    <tr><td colspan="6" style="text-align: center;">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- System Status -->
+        <div class="section">
+            <h2>System Status</h2>
+            <table id="statusTable">
+                <thead>
+                    <tr>
+                        <th>Site</th>
+                        <th>Active</th>
+                        <th>Total Files</th>
+                        <th>Manual Files</th>
+                        <th>Total IDs</th>
+                        <th>Last Processed</th>
+                    </tr>
+                </thead>
+                <tbody id="statusBody">
+                    <tr><td colspan="6" style="text-align: center;">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Site Files Modal (hidden by default) -->
+        <div id="filesModal" class="section" style="display: none;">
+            <h2>Files for <span id="modalSiteUrl"></span></h2>
+            <div id="filesList"></div>
+            <button onclick="closeFilesModal()">Close</button>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

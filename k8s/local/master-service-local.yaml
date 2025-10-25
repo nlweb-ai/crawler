@@ -1,0 +1,17 @@
+# Local override for master service
+# Uses NodePort instead of LoadBalancer for local testing
+apiVersion: v1
+kind: Service
+metadata:
+  name: crawler-master-external
+  namespace: crawler
+spec:
+  selector:
+    app: crawler-master
+  ports:
+  - port: 80
+    targetPort: 5001
+    protocol: TCP
+    name: http
+    nodePort: 30001  # Access on localhost:30001 for local k8s
+  type: NodePort

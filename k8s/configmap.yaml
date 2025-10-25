@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: crawler-config
+  namespace: crawler
+data:
+  # Queue Configuration
+  queue-type: "storage"
+
+  # Storage Queue Configuration
+  storage-queue-name: "crawler-jobs"
+
+  # Service Bus Configuration (backup)
+  # service-bus-queue-name: "crawler-queue"
+
+  # Database Configuration
+  db-database: "yoast-crawl"
+
+  # Blob Storage Configuration
+  blob-storage-account-name: "crawler1039stor"
+  blob-storage-container-name: "crawler-data"
+
+  # Azure OpenAI Configuration (Optional)
+  azure-openai-deployment-name: "gpt-35-turbo"
+
+  # Azure Search Configuration (Optional)
+  azure-search-index-name: "crawler-vectors"

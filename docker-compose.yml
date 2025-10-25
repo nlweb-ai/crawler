@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  # Master service - API and Scheduler
+  master:
+    build:
+      context: .
+      dockerfile: k8s/Dockerfile.master
+    ports:
+      - "5001:5001"
+    environment:
+      # Use environment variables from .env file
+      - AZURE_SERVICE_BUS_NAMESPACE=${AZURE_SERVICE_BUS_NAMESPACE}
+      - AZURE_SERVICE_BUS_QUEUE_NAME=${AZURE_SERVICE_BUS_QUEUE_NAME}
+      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID}
+      - AZURE_TENANT_ID=${AZURE_TENANT_ID}
+      - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET}
+      - DB_SERVER=${DB_SERVER}
+      - DB_DATABASE=${DB_DATABASE}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - BLOB_STORAGE_ACCOUNT_NAME=${BLOB_STORAGE_ACCOUNT_NAME}
+      - BLOB_STORAGE_CONTAINER_NAME=${BLOB_STORAGE_CONTAINER_NAME}
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
+      - AZURE_OPENAI_KEY=${AZURE_OPENAI_KEY}
+      - AZURE_OPENAI_DEPLOYMENT_NAME=${AZURE_OPENAI_DEPLOYMENT_NAME}
+      - AZURE_SEARCH_ENDPOINT=${AZURE_SEARCH_ENDPOINT}
+      - AZURE_SEARCH_KEY=${AZURE_SEARCH_KEY}
+      - AZURE_SEARCH_INDEX_NAME=${AZURE_SEARCH_INDEX_NAME}
+    volumes:
+      - ./data:/app/data
+    networks:
+      - crawler-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Worker service - can scale this
+  worker:
+    build:
+      context: .
+      dockerfile: k8s/Dockerfile.worker
+    environment:
+      # Use environment variables from .env file
+      - AZURE_SERVICE_BUS_NAMESPACE=${AZURE_SERVICE_BUS_NAMESPACE}
+      - AZURE_SERVICE_BUS_QUEUE_NAME=${AZURE_SERVICE_BUS_QUEUE_NAME}
+      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID}
+      - AZURE_TENANT_ID=${AZURE_TENANT_ID}
+      - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET}
+      - DB_SERVER=${DB_SERVER}
+      - DB_DATABASE=${DB_DATABASE}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - BLOB_STORAGE_ACCOUNT_NAME=${BLOB_STORAGE_ACCOUNT_NAME}
+      - BLOB_STORAGE_CONTAINER_NAME=${BLOB_STORAGE_CONTAINER_NAME}
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
+      - AZURE_OPENAI_KEY=${AZURE_OPENAI_KEY}
+      - AZURE_OPENAI_DEPLOYMENT_NAME=${AZURE_OPENAI_DEPLOYMENT_NAME}
+      - AZURE_SEARCH_ENDPOINT=${AZURE_SEARCH_ENDPOINT}
+      - AZURE_SEARCH_KEY=${AZURE_SEARCH_KEY}
+      - AZURE_SEARCH_INDEX_NAME=${AZURE_SEARCH_INDEX_NAME}
+    volumes:
+      - ./data:/app/data
+    networks:
+      - crawler-network
+    deploy:
+      replicas: 2  # Start with 2 workers
+    depends_on:
+      - master
+
+networks:
+  crawler-network:
+    driver: bridge

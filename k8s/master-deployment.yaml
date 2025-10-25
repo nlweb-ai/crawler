@@ -1,0 +1,151 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crawler-master
+  namespace: crawler
+spec:
+  replicas: 1  # Only one master instance
+  selector:
+    matchLabels:
+      app: crawler-master
+  template:
+    metadata:
+      labels:
+        app: crawler-master
+        azure.workload.identity/use: "true"
+    spec:
+      serviceAccountName: crawler-sa
+      containers:
+      - name: master
+        image: yoastcontainerregistry.azurecr.io/crawler:latest
+        imagePullPolicy: Always
+        command: ["python3", "code/core/api.py"]
+        ports:
+        - containerPort: 5001
+          name: api
+        env:
+        - name: QUEUE_TYPE
+          valueFrom:
+            configMapKeyRef:
+              name: crawler-config
+              key: queue-type
+        - name: AZURE_SERVICEBUS_NAMESPACE
+          valueFrom:
+            secretKeyRef:
+              name: crawler-secrets
+              key: service-bus-namespace
+        - name: AZURE_SERVICE_BUS_QUEUE_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: crawler-config
+              key: service-bus-queue-name
+              optional: true
+        - name: AZURE_STORAGE_ACCOUNT_NAME
+          valueFrom:
+            secretKeyRef:
+              name: crawler-secrets
+              key: storage-account-name
+              optional: true
+        - name: AZURE_STORAGE_QUEUE_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: crawler-config
+              key: storage-queue-name
+              optional: true
+        - name: AZURE_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: crawler-secrets
+              key: azure-client-id
+        - name: AZURE_TENANT_ID
+          valueFrom:
+            secretKeyRef:
+              name: crawler-secrets
+              key: azure-tenant-id
+        # AZURE_CLIENT_SECRET not needed - using Managed Identity
+        - name: DB_SERVER
+          valueFrom:
+            secretKeyRef:
+              name: crawler-secrets
+              key: db-server
+        - name: DB_DATABASE
+          valueFrom:
+            configMapKeyRef:
+              name: crawler-config
+              key: db-database
+        - name: DB_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: crawler-secrets
+              key: db-username
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: crawler-secrets
+              key: db-password
+        - name: BLOB_STORAGE_ACCOUNT_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: crawler-config
+              key: blob-storage-account-name
+        - name: BLOB_STORAGE_CONTAINER_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: crawler-config
+              key: blob-storage-container-name
+        - name: AZURE_OPENAI_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              name: crawler-secrets
+              key: azure-openai-endpoint
+              optional: true
+        - name: AZURE_OPENAI_KEY
+          valueFrom:
+            secretKeyRef:
+              name: crawler-secrets
+              key: azure-openai-key
+              optional: true
+        - name: AZURE_OPENAI_DEPLOYMENT_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: crawler-config
+              key: azure-openai-deployment-name
+              optional: true
+        - name: AZURE_SEARCH_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              name: crawler-secrets
+              key: azure-search-endpoint
+              optional: true
+        - name: AZURE_SEARCH_KEY
+          valueFrom:
+            secretKeyRef:
+              name: crawler-secrets
+              key: azure-search-key
+              optional: true
+        - name: AZURE_SEARCH_INDEX_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: crawler-config
+              key: azure-search-index-name
+              optional: true
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        # Health checks commented out - Flask app doesn't have /health endpoint
+        # livenessProbe:
+        #   httpGet:
+        #     path: /health
+        #     port: 5001
+        #   initialDelaySeconds: 30
+        #   periodSeconds: 30
+        # readinessProbe:
+        #   httpGet:
+        #     path: /health
+        #     port: 5001
+        #   initialDelaySeconds: 10
+        #   periodSeconds: 10

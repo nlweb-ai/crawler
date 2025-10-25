@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: health-check-script
+  namespace: crawler
+data:
+  health.py: |
+    from flask import Flask, jsonify
+    import os
+
+    app = Flask(__name__)
+
+    @app.route('/health')
+    def health():
+        return jsonify({'status': 'healthy'}), 200
+
+    @app.route('/ready')
+    def ready():
+        # Add readiness checks here (DB connection, queue access, etc.)
+        return jsonify({'status': 'ready'}), 200
+
+    if __name__ == '__main__':
+        app.run(host='0.0.0.0', port=5001)

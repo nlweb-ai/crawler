@@ -1,0 +1,120 @@
+# Local override for worker deployment
+# Reduced resources for local testing
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crawler-worker
+  namespace: crawler
+spec:
+  replicas: 2  # Start with fewer workers locally
+  selector:
+    matchLabels:
+      app: crawler-worker
+  template:
+    metadata:
+      labels:
+        app: crawler-worker
+    spec:
+      containers:
+      - name: worker
+        image: crawler-worker:latest
+        imagePullPolicy: Never  # Use local image
+        env:
+        - name: AZURE_SERVICE_BUS_NAMESPACE
+          valueFrom:
+            secretKeyRef:
+              name: crawler-secrets
+              key: service-bus-namespace
+        - name: AZURE_SERVICE_BUS_QUEUE_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: crawler-config
+              key: service-bus-queue-name
+        - name: AZURE_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: crawler-secrets
+              key: azure-client-id
+        - name: AZURE_TENANT_ID
+          valueFrom:
+            secretKeyRef:
+              name: crawler-secrets
+              key: azure-tenant-id
+        - name: AZURE_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: crawler-secrets
+              key: azure-client-secret
+        - name: DB_SERVER
+          valueFrom:
+            secretKeyRef:
+              name: crawler-secrets
+              key: db-server
+        - name: DB_DATABASE
+          valueFrom:
+            configMapKeyRef:
+              name: crawler-config
+              key: db-database
+        - name: DB_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: crawler-secrets
+              key: db-username
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: crawler-secrets
+              key: db-password
+        - name: BLOB_STORAGE_ACCOUNT_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: crawler-config
+              key: blob-storage-account-name
+        - name: BLOB_STORAGE_CONTAINER_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: crawler-config
+              key: blob-storage-container-name
+        - name: AZURE_OPENAI_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              name: crawler-secrets
+              key: azure-openai-endpoint
+              optional: true
+        - name: AZURE_OPENAI_KEY
+          valueFrom:
+            secretKeyRef:
+              name: crawler-secrets
+              key: azure-openai-key
+              optional: true
+        - name: AZURE_OPENAI_DEPLOYMENT_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: crawler-config
+              key: azure-openai-deployment-name
+              optional: true
+        - name: AZURE_SEARCH_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              name: crawler-secrets
+              key: azure-search-endpoint
+              optional: true
+        - name: AZURE_SEARCH_KEY
+          valueFrom:
+            secretKeyRef:
+              name: crawler-secrets
+              key: azure-search-key
+              optional: true
+        - name: AZURE_SEARCH_INDEX_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: crawler-config
+              key: azure-search-index-name
+              optional: true
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "250m"

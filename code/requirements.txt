@@ -1,0 +1,11 @@
+flask==2.3.3
+flask-cors==4.0.0
+pymssql==2.2.11
+requests==2.31.0
+azure-storage-blob==12.19.0
+azure-identity==1.14.0
+openai>=1.0.0
+azure-search-documents==11.4.0
+azure-servicebus>=7.11.0
+azure-storage-queue>=12.8.0
+azure-identity>=1.14.0

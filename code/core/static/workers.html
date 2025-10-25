@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Workers - Schema Crawler</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: #2c3e50;
+            color: white;
+            padding: 1.5rem 0;
+            margin-bottom: 2rem;
+        }
+
+        h1 { margin-bottom: 0.5rem; }
+
+        .nav {
+            margin-top: 1rem;
+        }
+
+        .nav a {
+            color: #3498db;
+            text-decoration: none;
+            margin-right: 1rem;
+        }
+
+        .nav a:hover {
+            text-decoration: underline;
+        }
+
+        .section {
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        tr:hover { background: #f8f9fa; }
+
+        .status-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .status-running { background: #d4edda; color: #155724; }
+        .status-waiting { background: #fff3cd; color: #856404; }
+        .status-processing { background: #cce5ff; color: #004085; }
+        .status-error { background: #f8d7da; color: #721c24; }
+        .status-pending { background: #e2e3e5; color: #383d41; }
+
+        .pod-phase-running { color: #28a745; font-weight: 600; }
+        .pod-phase-pending { color: #ffc107; font-weight: 600; }
+        .pod-phase-failed { color: #dc3545; font-weight: 600; }
+
+        button {
+            padding: 0.5rem 1rem;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-bottom: 1rem;
+        }
+
+        button:hover { background: #2980b9; }
+
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #3498db;
+        }
+
+        .worker-link {
+            color: #3498db;
+            text-decoration: none;
+            font-family: monospace;
+        }
+
+        .worker-link:hover {
+            text-decoration: underline;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+        }
+
+        .stat-label {
+            font-size: 0.85rem;
+            opacity: 0.9;
+            margin-top: 0.25rem;
+        }
+
+        .error-text {
+            color: #dc3545;
+            font-size: 0.85rem;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>Worker Status</h1>
+            <p>Monitor all crawler workers</p>
+            <div class="nav">
+                <a href="/">← Back to Admin</a>
+                <a href="/files.html">Files Table</a>
+                <a href="/queue.html">Queue History</a>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="stats" id="stats">
+            <div class="stat-card">
+                <div class="stat-value" id="totalWorkers">0</div>
+                <div class="stat-label">Total Workers</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="runningWorkers">0</div>
+                <div class="stat-label">Running</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="processingWorkers">0</div>
+                <div class="stat-label">Processing Jobs</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="totalJobsProcessed">0</div>
+                <div class="stat-label">Total Jobs Processed</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <button onclick="loadWorkers()">Refresh</button>
+
+            <table id="workersTable">
+                <thead>
+                    <tr>
+                        <th>Worker Name</th>
+                        <th>Pod Status</th>
+                        <th>Worker Status</th>
+                        <th>Jobs Processed</th>
+                        <th>Jobs Failed</th>
+                        <th>Current Job</th>
+                        <th>Last Job</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="workersBody">
+                    <tr><td colspan="8" class="loading">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin + '/api';
+
+        async function loadWorkers() {
+            try {
+                const response = await fetch(`${API_BASE}/workers`);
+                const workers = await response.json();
+
+                const tbody = document.getElementById('workersBody');
+
+                if (workers.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center;">No workers found</td></tr>';
+                    return;
+                }
+
+                let runningCount = 0;
+                let processingCount = 0;
+                let totalJobs = 0;
+
+                tbody.innerHTML = workers.map(worker => {
+                    const podPhaseClass = `pod-phase-${(worker.phase || 'unknown').toLowerCase()}`;
+
+                    let statusBadge = '<span class="status-badge status-pending">Unknown</span>';
+                    let jobsProcessed = '-';
+                    let jobsFailed = '-';
+                    let currentJob = '-';
+                    let lastJob = '-';
+                    let statusLink = '';
+
+                    if (worker.status) {
+                        const status = worker.status.status || 'unknown';
+                        statusBadge = `<span class="status-badge status-${status}">${status}</span>`;
+                        jobsProcessed = worker.status.total_jobs_processed || 0;
+                        jobsFailed = worker.status.total_jobs_failed || 0;
+                        totalJobs += jobsProcessed;
+
+                        if (status === 'running' || status === 'waiting') runningCount++;
+                        if (status === 'processing') processingCount++;
+
+                        if (worker.status.current_job) {
+                            const job = worker.status.current_job;
+                            currentJob = `<span style="font-family: monospace; font-size: 0.85rem;">${job.type || 'unknown'}: ${(job.file_url || '').substring(0, 40)}...</span>`;
+                        }
+
+                        if (worker.status.last_job_at) {
+                            const lastStatus = worker.status.last_job_status || 'unknown';
+                            const statusColor = lastStatus === 'success' ? '#28a745' : '#dc3545';
+                            lastJob = `<span style="color: ${statusColor}">${lastStatus}</span> at ${new Date(worker.status.last_job_at).toLocaleTimeString()}`;
+                        }
+
+                        const workerDataJson = JSON.stringify(worker.status, null, 2);
+                        statusLink = `<button onclick='alert(${JSON.stringify(workerDataJson).replace(/'/g, "\\'")}); return false;' style="padding: 0.25rem 0.5rem; font-size: 0.85rem;">View JSON</button>`;
+                    } else if (worker.error) {
+                        statusBadge = `<span class="error-text">${worker.error}</span>`;
+                    }
+
+                    return `
+                        <tr>
+                            <td>${worker.name}<br><span style="font-size: 0.75rem; color: #666;">IP: ${worker.ip}</span></td>
+                            <td class="${podPhaseClass}">${worker.phase}</td>
+                            <td>${statusBadge}</td>
+                            <td>${jobsProcessed}</td>
+                            <td>${jobsFailed}</td>
+                            <td>${currentJob}</td>
+                            <td>${lastJob}</td>
+                            <td>${statusLink}</td>
+                        </tr>
+                    `;
+                }).join('');
+
+                // Update stats
+                document.getElementById('totalWorkers').textContent = workers.length;
+                document.getElementById('runningWorkers').textContent = runningCount;
+                document.getElementById('processingWorkers').textContent = processingCount;
+                document.getElementById('totalJobsProcessed').textContent = totalJobs;
+
+            } catch (error) {
+                console.error('Failed to load workers:', error);
+                document.getElementById('workersBody').innerHTML =
+                    '<tr><td colspan="8" style="text-align: center; color: red;">Error loading workers</td></tr>';
+            }
+        }
+
+        // Initial load
+        document.addEventListener('DOMContentLoaded', loadWorkers);
+
+        // Auto-refresh every 10 seconds
+        setInterval(loadWorkers, 10000);
+    </script>
+</body>
+</html>
