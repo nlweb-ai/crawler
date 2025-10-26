@@ -1,5 +1,7 @@
 flask==2.3.3
 flask-cors==4.0.0
+flask-login==0.6.3
+authlib==1.2.1
 pymssql==2.2.11
 requests==2.31.0
 azure-storage-blob==12.19.0

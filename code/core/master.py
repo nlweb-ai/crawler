@@ -126,7 +126,7 @@ def get_schema_urls_from_robots(site_url):
     print(f"No schema files found for {site_url}")
     return []
 
-def add_schema_map_to_site(site_url, schema_map_url):
+def add_schema_map_to_site(site_url, user_id, schema_map_url):
     """
     Add a schema map to a site (Level 2 logic):
     1. Fetch and parse the schema_map XML
@@ -140,9 +140,9 @@ def add_schema_map_to_site(site_url, schema_map_url):
 
         # Check if site exists, if not create it
         cursor = conn.cursor()
-        cursor.execute("SELECT site_url FROM sites WHERE site_url = %s", (site_url,))
+        cursor.execute("SELECT site_url FROM sites WHERE site_url = %s AND user_id = %s", (site_url, user_id))
         if not cursor.fetchone():
-            db.add_site(conn, site_url)
+            db.add_site(conn, site_url, user_id)
 
         # Fetch and parse the schema_map to get all JSON file URLs
         response = requests.get(schema_map_url, timeout=10)
@@ -160,7 +160,7 @@ def add_schema_map_to_site(site_url, schema_map_url):
         files_to_add = [(site_url, schema_map_url, json_url) for json_url in json_file_urls]
 
         # Add all files to the database
-        added_files, removed_files = db.update_site_files(conn, site_url, files_to_add)
+        added_files, removed_files = db.update_site_files(conn, site_url, user_id, files_to_add)
 
         # Queue jobs for NEW files only
         queue = get_queue()
@@ -170,6 +170,7 @@ def add_schema_map_to_site(site_url, schema_map_url):
             try:
                 job = {
                     'type': 'process_file',
+                    'user_id': user_id,  # Add user_id to job
                     'site': site_url,
                     'file_url': file_url,
                     'schema_map': schema_map_url,
@@ -189,6 +190,7 @@ def add_schema_map_to_site(site_url, schema_map_url):
             try:
                 job = {
                     'type': 'process_removed_file',
+                    'user_id': user_id,  # Add user_id to job
                     'site': site_url,
                     'file_url': file_url,
                     'queued_at': datetime.utcnow().isoformat()
@@ -213,7 +215,7 @@ def add_schema_map_to_site(site_url, schema_map_url):
             except:
                 pass
 
-def process_site(site_url):
+def process_site(site_url, user_id):
     """
     Process a site (Level 1 logic):
     1. Discover schema maps from robots.txt
@@ -238,7 +240,7 @@ def process_site(site_url):
         total_queued = 0
         for schema_map_url in schema_map_urls:
             print(f"[MASTER] Adding schema map: {schema_map_url}")
-            files_added, files_queued = add_schema_map_to_site(site_url, schema_map_url)
+            files_added, files_queued = add_schema_map_to_site(site_url, user_id, schema_map_url)
             total_files += files_added
             total_queued += files_queued
 

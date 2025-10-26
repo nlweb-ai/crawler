@@ -1,5 +1,6 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, redirect, url_for
 from flask_cors import CORS
+from flask_login import login_user, logout_user
 import db
 from master import process_site
 from queue_interface import get_queue
@@ -8,9 +9,14 @@ import os
 import time
 from datetime import datetime, timedelta
 import json
+import auth
 
 app = Flask(__name__, static_folder='static')
+app.secret_key = os.getenv('FLASK_SECRET_KEY', 'dev-secret-key-change-in-production')
 CORS(app)
+
+# Initialize authentication
+auth.init_auth(app)
 
 # Global scheduler task
 scheduler_task = None
@@ -20,30 +26,189 @@ event_loop = None
 # Track when master started
 master_started_at = datetime.utcnow()
 
+# ========== Authentication Routes ==========
+
+@app.route('/login')
+def login_page():
+    """Show login page"""
+    return send_from_directory('static', 'login.html')
+
+
+@app.route('/auth/github')
+def github_login():
+    """Redirect to GitHub OAuth"""
+    if not auth.github:
+        return jsonify({'error': 'GitHub OAuth not configured'}), 500
+    redirect_uri = url_for('github_callback', _external=True)
+    return auth.github.authorize_redirect(redirect_uri)
+
+
+@app.route('/auth/github/callback')
+def github_callback():
+    """Handle GitHub OAuth callback"""
+    print("[AUTH] GitHub callback received")
+    if not auth.github:
+        print("[AUTH] GitHub OAuth not configured")
+        return jsonify({'error': 'GitHub OAuth not configured'}), 500
+
+    try:
+        print("[AUTH] Authorizing GitHub access token...")
+        token = auth.github.authorize_access_token()
+        print("[AUTH] Getting GitHub user info...")
+        resp = auth.github.get('user', token=token)
+        user_info = resp.json()
+        print(f"[AUTH] GitHub user info received: {user_info.get('login')}, id={user_info.get('id')}")
+
+        # Get user email (may require additional API call)
+        email = user_info.get('email')
+        if not email:
+            print("[AUTH] Email not in user info, fetching from /user/emails...")
+            email_resp = auth.github.get('user/emails', token=token)
+            emails = email_resp.json()
+            # Get primary email
+            for e in emails:
+                if e.get('primary'):
+                    email = e.get('email')
+                    break
+            if not email and emails:
+                email = emails[0].get('email')
+            print(f"[AUTH] Email fetched: {email}")
+
+        # Create user_id from GitHub ID
+        user_id = f"github:{user_info['id']}"
+        name = user_info.get('name') or user_info.get('login')
+        print(f"[AUTH] Creating user_id: {user_id}, name: {name}")
+
+        # Get or create user
+        user = auth.get_or_create_user(user_id, email, name, 'github')
+
+        # Log user in
+        login_user(user)
+        print(f"[AUTH] User logged in successfully: {user_id}")
+
+        # Redirect to main page
+        return redirect('/')
+
+    except Exception as e:
+        print(f"[AUTH] GitHub OAuth error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Authentication failed'}), 500
+
+
+@app.route('/auth/microsoft')
+def microsoft_login():
+    """Redirect to Microsoft OAuth"""
+    if not auth.microsoft:
+        return jsonify({'error': 'Microsoft OAuth not configured'}), 500
+    redirect_uri = url_for('microsoft_callback', _external=True)
+    return auth.microsoft.authorize_redirect(redirect_uri)
+
+
+@app.route('/auth/microsoft/callback')
+def microsoft_callback():
+    """Handle Microsoft OAuth callback"""
+    print("[AUTH] Microsoft callback received")
+    if not auth.microsoft:
+        print("[AUTH] Microsoft OAuth not configured")
+        return jsonify({'error': 'Microsoft OAuth not configured'}), 500
+
+    try:
+        print("[AUTH] Authorizing Microsoft access token...")
+        token = auth.microsoft.authorize_access_token()
+        user_info = token.get('userinfo')
+
+        if not user_info:
+            print("[AUTH] Failed to get user info from token")
+            return jsonify({'error': 'Failed to get user info'}), 500
+
+        print(f"[AUTH] Microsoft user info received: oid={user_info.get('oid')}")
+
+        # Create user_id from Microsoft OID
+        user_id = f"microsoft:{user_info['oid']}"
+        email = user_info.get('email') or user_info.get('preferred_username')
+        name = user_info.get('name')
+        print(f"[AUTH] Creating user_id: {user_id}, name: {name}, email: {email}")
+
+        # Get or create user
+        user = auth.get_or_create_user(user_id, email, name, 'microsoft')
+
+        # Log user in
+        login_user(user)
+        print(f"[AUTH] User logged in successfully: {user_id}")
+
+        # Redirect to main page
+        return redirect('/')
+
+    except Exception as e:
+        print(f"[AUTH] Microsoft OAuth error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Authentication failed'}), 500
+
+
+@app.route('/logout')
+def logout():
+    """Log out the current user"""
+    logout_user()
+    return redirect('/login')
+
+
+@app.route('/api/me')
+@auth.require_auth
+def get_current_user_info():
+    """Get current user information including API key"""
+    user_id = auth.get_current_user()
+    conn = db.get_connection()
+    try:
+        user_data = db.get_user_by_id(conn, user_id)
+        if user_data:
+            return jsonify({
+                'user_id': user_data['user_id'],
+                'email': user_data['email'],
+                'name': user_data['name'],
+                'provider': user_data['provider'],
+                'api_key': user_data['api_key'],
+                'created_at': user_data['created_at'].isoformat() if user_data['created_at'] else None,
+                'last_login': user_data['last_login'].isoformat() if user_data['last_login'] else None
+            })
+        return jsonify({'error': 'User not found'}), 404
+    finally:
+        conn.close()
+
+
 # Serve the frontend
 @app.route('/')
+@auth.require_auth
 def index():
     return send_from_directory('static', 'index.html')
 
 @app.route('/<path:path>')
 def static_files(path):
+    # Allow access to login.html without authentication
+    if path == 'login.html':
+        return send_from_directory('static', path)
     return send_from_directory('static', path)
 
 # API Routes
 
 @app.route('/api/sites', methods=['GET'])
+@auth.require_auth
 def get_sites():
     """Get all sites with their status"""
+    user_id = auth.get_current_user()
     conn = db.get_connection()
     try:
-        sites = db.get_all_sites(conn)
+        sites = db.get_all_sites(conn, user_id)
         return jsonify(sites)
     finally:
         conn.close()
 
 @app.route('/api/sites', methods=['POST'])
+@auth.require_auth
 def add_site():
     """Add a new site to monitor"""
+    user_id = auth.get_current_user()
     try:
         data = request.json
         site_url = data.get('site_url')
@@ -54,11 +219,11 @@ def add_site():
 
         conn = db.get_connection()
         try:
-            db.add_site(conn, site_url, interval_hours)
+            db.add_site(conn, site_url, user_id, interval_hours)
             # Process site immediately in background
             if event_loop:
                 try:
-                    asyncio.run_coroutine_threadsafe(process_site_async(site_url), event_loop)
+                    asyncio.run_coroutine_threadsafe(process_site_async(site_url, user_id), event_loop)
                 except Exception as e:
                     print(f"[API] Warning: Could not start async processing for {site_url}: {e}")
             return jsonify({'success': True, 'site_url': site_url})
@@ -69,27 +234,29 @@ def add_site():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/sites/<path:site_url>', methods=['DELETE'])
+@auth.require_auth
 def delete_site(site_url):
     """Remove a site from monitoring by deleting all its schema_maps"""
+    user_id = auth.get_current_user()
     conn = db.get_connection()
     try:
         cursor = conn.cursor()
 
-        # Get all unique schema_maps for this site
+        # Get all unique schema_maps for this site and user
         cursor.execute("""
             SELECT DISTINCT schema_map FROM files
-            WHERE site_url = %s
-        """, (site_url,))
+            WHERE site_url = %s AND user_id = %s
+        """, (site_url, user_id))
         schema_maps = [row[0] for row in cursor.fetchall()]
 
         # Delete each schema_map (queues removal jobs and deletes from DB)
         total_files_removed = 0
         for schema_map_url in schema_maps:
-            files_removed = _delete_schema_map_internal(conn, site_url, schema_map_url)
+            files_removed = _delete_schema_map_internal(conn, site_url, user_id, schema_map_url)
             total_files_removed += files_removed
 
         # Finally delete the site itself
-        cursor.execute("DELETE FROM sites WHERE site_url = %s", (site_url,))
+        cursor.execute("DELETE FROM sites WHERE site_url = %s AND user_id = %s", (site_url, user_id))
         conn.commit()
 
         return jsonify({
@@ -100,7 +267,7 @@ def delete_site(site_url):
     finally:
         conn.close()
 
-def _delete_schema_map_internal(conn, site_url, schema_map_url):
+def _delete_schema_map_internal(conn, site_url, user_id, schema_map_url):
     """Internal function to delete files for a schema_map and queue removal jobs"""
     from queue_interface_aad import get_queue_with_aad
 
@@ -109,8 +276,8 @@ def _delete_schema_map_internal(conn, site_url, schema_map_url):
     # Get all files for this schema_map before deleting
     cursor.execute("""
         SELECT file_url FROM files
-        WHERE site_url = %s AND schema_map = %s
-    """, (site_url, schema_map_url))
+        WHERE site_url = %s AND user_id = %s AND schema_map = %s
+    """, (site_url, user_id, schema_map_url))
     files = [row[0] for row in cursor.fetchall()]
 
     # Queue removal jobs for each file so workers can:
@@ -121,6 +288,7 @@ def _delete_schema_map_internal(conn, site_url, schema_map_url):
     for file_url in files:
         job = {
             'type': 'process_removed_file',
+            'user_id': user_id,  # Add user_id to job
             'site': site_url,
             'file_url': file_url
         }
@@ -132,9 +300,11 @@ def _delete_schema_map_internal(conn, site_url, schema_map_url):
     return len(files)
 
 @app.route('/api/sites/<path:site_url>/schema-files', methods=['POST'])
+@auth.require_auth
 def add_schema_file(site_url):
     """Add a manual schema map to a specific site and extract all files from it"""
     from master import add_schema_map_to_site
+    user_id = auth.get_current_user()
 
     data = request.json
     schema_map_url = data.get('schema_map_url')
@@ -144,7 +314,7 @@ def add_schema_file(site_url):
 
     try:
         # Use the Level 2 logic from master.py
-        files_added, files_queued = add_schema_map_to_site(site_url, schema_map_url)
+        files_added, files_queued = add_schema_map_to_site(site_url, user_id, schema_map_url)
 
         if files_added == 0:
             return jsonify({'error': 'No schema files found or failed to fetch schema_map'}), 400
@@ -161,8 +331,10 @@ def add_schema_file(site_url):
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/sites/<path:site_url>/schema-files', methods=['DELETE'])
+@auth.require_auth
 def delete_schema_file(site_url):
     """Remove a schema map and all its files from a site"""
+    user_id = auth.get_current_user()
     data = request.json
     schema_map_url = data.get('schema_map_url')
 
@@ -172,7 +344,7 @@ def delete_schema_file(site_url):
     conn = db.get_connection()
     try:
         # Use the internal function to delete files and queue removal jobs
-        files_removed = _delete_schema_map_internal(conn, site_url, schema_map_url)
+        files_removed = _delete_schema_map_internal(conn, site_url, user_id, schema_map_url)
         conn.commit()
 
         return jsonify({
@@ -184,11 +356,13 @@ def delete_schema_file(site_url):
         conn.close()
 
 @app.route('/api/status', methods=['GET'])
+@auth.require_auth
 def get_status():
     """Get overall system status"""
+    user_id = auth.get_current_user()
     conn = db.get_connection()
     try:
-        sites_status = db.get_site_status(conn)
+        sites_status = db.get_site_status(conn, user_id)
         # Return object with master info and sites array
         return jsonify({
             'master_started_at': master_started_at.isoformat(),
@@ -363,13 +537,15 @@ def get_queue_status():
     return jsonify(status)
 
 @app.route('/api/process/<path:site_url>', methods=['POST'])
+@auth.require_auth
 def trigger_process(site_url):
     """Manually trigger processing for a site"""
+    user_id = auth.get_current_user()
     try:
         # Process in background using asyncio
         if event_loop:
             try:
-                asyncio.run_coroutine_threadsafe(process_site_async(site_url), event_loop)
+                asyncio.run_coroutine_threadsafe(process_site_async(site_url, user_id), event_loop)
             except Exception as e:
                 print(f"[API] Warning: Could not trigger processing for {site_url}: {e}")
         else:
@@ -404,17 +580,19 @@ def stop_scheduler_endpoint():
     return jsonify({'success': True, 'message': 'Scheduler stopped'})
 
 @app.route('/api/sites/<path:site_url>/files', methods=['GET'])
+@auth.require_auth
 def get_site_files(site_url):
     """Get all files for a specific site"""
+    user_id = auth.get_current_user()
     conn = db.get_connection()
     try:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT file_url, schema_map, last_read_time, number_of_items, is_manual, is_active
             FROM files
-            WHERE site_url = %s AND is_active = 1
+            WHERE site_url = %s AND user_id = %s AND is_active = 1
             ORDER BY file_url
-        """, (site_url,))
+        """, (site_url, user_id))
 
         files = [
             {
@@ -432,8 +610,10 @@ def get_site_files(site_url):
         conn.close()
 
 @app.route('/api/files', methods=['GET'])
+@auth.require_auth
 def get_all_files():
     """Get all files from the database with their IDs"""
+    user_id = auth.get_current_user()
     conn = db.get_connection()
     try:
         cursor = conn.cursor()
@@ -442,11 +622,12 @@ def get_all_files():
                    f.number_of_items, f.last_read_time,
                    COUNT(DISTINCT i.id) as id_count
             FROM files f
-            LEFT JOIN ids i ON f.file_url = i.file_url
+            LEFT JOIN ids i ON f.file_url = i.file_url AND f.user_id = i.user_id
+            WHERE f.user_id = %s
             GROUP BY f.site_url, f.file_url, f.schema_map, f.is_active, f.is_manual,
                      f.number_of_items, f.last_read_time
             ORDER BY f.site_url, f.file_url
-        """)
+        """, (user_id,))
 
         files = [
             {
@@ -466,17 +647,19 @@ def get_all_files():
         conn.close()
 
 @app.route('/api/files/<path:file_url>/ids', methods=['GET'])
+@auth.require_auth
 def get_file_ids(file_url):
     """Get all IDs for a specific file"""
+    user_id = auth.get_current_user()
     conn = db.get_connection()
     try:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT id
             FROM ids
-            WHERE file_url = %s
+            WHERE file_url = %s AND user_id = %s
             ORDER BY id
-        """, (file_url,))
+        """, (file_url, user_id))
 
         ids = [row[0] for row in cursor.fetchall()]
         return jsonify({
@@ -598,11 +781,11 @@ def get_workers():
         import traceback
         return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
 
-async def process_site_async(site_url):
+async def process_site_async(site_url, user_id):
     """Async wrapper for process_site function"""
     try:
         # Run process_site in a thread pool to avoid blocking the event loop
-        await asyncio.get_event_loop().run_in_executor(None, process_site, site_url)
+        await asyncio.get_event_loop().run_in_executor(None, process_site, site_url, user_id)
     except Exception as e:
         print(f"[API] Error processing site {site_url}: {e}")
 
@@ -617,10 +800,10 @@ async def scheduler_loop():
             conn = db.get_connection()
             cursor = conn.cursor()
 
-            # Get sites that need reprocessing
+            # Get sites that need reprocessing (with user_id)
             # Check sites where last_processed + interval_hours < now OR never processed
             cursor.execute("""
-                SELECT site_url, process_interval_hours, last_processed
+                SELECT site_url, user_id, process_interval_hours, last_processed
                 FROM sites
                 WHERE is_active = 1
                   AND (
@@ -636,15 +819,15 @@ async def scheduler_loop():
 
                 # Create tasks for all sites to process concurrently
                 tasks = []
-                for site_url, interval_hours, last_processed in sites_to_process:
+                for site_url, user_id, interval_hours, last_processed in sites_to_process:
                     if last_processed:
                         time_since = datetime.utcnow() - last_processed
-                        print(f"[SCHEDULER] Processing {site_url} (last processed {time_since} ago)")
+                        print(f"[SCHEDULER] Processing {site_url} for user {user_id} (last processed {time_since} ago)")
                     else:
-                        print(f"[SCHEDULER] Processing {site_url} (never processed before)")
+                        print(f"[SCHEDULER] Processing {site_url} for user {user_id} (never processed before)")
 
                     # Add to task list for concurrent processing
-                    tasks.append(process_site_async(site_url))
+                    tasks.append(process_site_async(site_url, user_id))
 
                 # Process all sites concurrently
                 if tasks:

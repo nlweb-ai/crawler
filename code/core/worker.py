@@ -162,10 +162,16 @@ def extract_schema_data_from_url(url):
 def process_job(conn, job):
     """Process a single job from the queue"""
     try:
+        # Extract user_id from job
+        user_id = job.get('user_id')
+        if not user_id:
+            print(f"[WORKER] WARNING: Job missing user_id, skipping: {job}")
+            return False
+
         if job['type'] == 'process_file':
-            # Check if the file still exists in the files table
+            # Check if the file still exists in the files table for this user
             cursor = conn.cursor()
-            cursor.execute("SELECT file_url FROM files WHERE file_url = %s", (job['file_url'],))
+            cursor.execute("SELECT file_url FROM files WHERE file_url = %s AND user_id = %s", (job['file_url'], user_id))
             if not cursor.fetchone():
                 print(f"[WORKER] File no longer exists in database, skipping: {job['file_url']}")
                 return True  # Job completed successfully (file was deleted)
@@ -176,13 +182,13 @@ def process_job(conn, job):
             print(f"[WORKER] Extracted {len(ids)} IDs, {len(objects)} objects from {job['file_url']}")
 
             # Update database state with the extracted IDs
-            added_ids, removed_ids = db.update_file_ids(conn, job['file_url'], set(ids))
+            added_ids, removed_ids = db.update_file_ids(conn, job['file_url'], user_id, set(ids))
 
             print(f"[WORKER] DB update: {len(added_ids)} added, {len(removed_ids)} removed")
 
-            # For each added ID, check if it's new globally
+            # For each added ID, check if it's new globally (for this user)
             for id in added_ids:
-                ref_count = db.count_id_references(conn, id)
+                ref_count = db.count_id_references(conn, id, user_id)
                 if ref_count == 1:
                     # First occurrence of this ID - add to vector DB
                     # Find corresponding object for this ID
@@ -197,32 +203,32 @@ def process_job(conn, job):
                 else:
                     print(f"[WORKER] ID {id} already exists (ref_count={ref_count}), not adding to vector DB")
 
-            # For each removed ID, check if it's gone globally
+            # For each removed ID, check if it's gone globally (for this user)
             for id in removed_ids:
-                ref_count = db.count_id_references(conn, id)
+                ref_count = db.count_id_references(conn, id, user_id)
                 if ref_count == 0:
                     # ID no longer exists in any file - remove from vector DB
                     vector_db_delete(id)
 
-            # Update the site's last_processed timestamp
+            # Update the site's last_processed timestamp (Note: may need user_id in future)
             update_site_last_processed(job['site'])
 
             return True
-            
+
         elif job['type'] == 'process_removed_file':
             print(f"[WORKER] Processing removal: {job['file_url']}")
 
-            # Get IDs that were in this file
-            ids = db.get_file_ids(conn, job['file_url'])
+            # Get IDs that were in this file for this user
+            ids = db.get_file_ids(conn, job['file_url'], user_id)
             print(f"[WORKER] Found {len(ids)} IDs to check for removal")
 
             # Remove all ID mappings for this file (deletes from ids table)
-            db.update_file_ids(conn, job['file_url'], set())
+            db.update_file_ids(conn, job['file_url'], user_id, set())
 
-            # Check each ID to see if it's gone globally
+            # Check each ID to see if it's gone globally (for this user)
             removed_from_vector_db = 0
             for id in ids:
-                if db.count_id_references(conn, id) == 0:
+                if db.count_id_references(conn, id, user_id) == 0:
                     # ID no longer exists in any file - remove from vector DB
                     print(f"[WORKER] Removing from vector DB: {id}")
                     vector_db_delete(id)
@@ -230,14 +236,14 @@ def process_job(conn, job):
 
             print(f"[WORKER] Removed {removed_from_vector_db} items from vector DB")
 
-            # Now delete the file from the files table
+            # Now delete the file from the files table for this user
             cursor = conn.cursor()
-            cursor.execute("DELETE FROM files WHERE file_url = %s", (job['file_url'],))
+            cursor.execute("DELETE FROM files WHERE file_url = %s AND user_id = %s", (job['file_url'], user_id))
             conn.commit()
             print(f"[WORKER] Deleted file from files table: {job['file_url']}")
 
             return True
-            
+
     except Exception as e:
         print(f"[ERROR] Job failed: {e}")
         import traceback
