@@ -35,12 +35,12 @@ def check_requirements():
         missing.append("requests")
 
     try:
-        import pyodbc
-        print("  ✓ pyodbc installed (database connections enabled)")
+        import pymssql
+        print("  ✓ pymssql installed (database connections enabled)")
     except ImportError:
-        optional_missing.append("pyodbc")
-        print("  ⚠ pyodbc not installed (database connections disabled)")
-        print("    To enable database, run: ./install_pyodbc_mac.sh (macOS)")
+        optional_missing.append("pymssql")
+        print("  ⚠ pymssql not installed (database connections disabled)")
+        print("    To enable database, install: pip install pymssql")
 
     # Install required packages if missing
     if missing:
