@@ -17,7 +17,7 @@ spec:
       serviceAccountName: crawler-sa
       containers:
       - name: master
-        image: yoastcontainerregistry.azurecr.io/crawler:latest
+        image: yoastcontainerregistry.azurecr.io/crawler-api:latest
         imagePullPolicy: Always
         command: ["python3", "code/core/api.py"]
         ports:
@@ -128,6 +128,36 @@ spec:
             configMapKeyRef:
               name: crawler-config
               key: azure-search-index-name
+              optional: true
+        - name: GITHUB_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: oauth-secrets
+              key: GITHUB_CLIENT_ID
+              optional: true
+        - name: GITHUB_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: oauth-secrets
+              key: GITHUB_CLIENT_SECRET
+              optional: true
+        - name: MICROSOFT_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: oauth-secrets
+              key: MICROSOFT_CLIENT_ID
+              optional: true
+        - name: MICROSOFT_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: oauth-secrets
+              key: MICROSOFT_CLIENT_SECRET
+              optional: true
+        - name: MICROSOFT_TENANT_ID
+          valueFrom:
+            secretKeyRef:
+              name: oauth-secrets
+              key: MICROSOFT_TENANT_ID
               optional: true
         resources:
           requests:

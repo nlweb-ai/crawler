@@ -34,6 +34,12 @@ def login_page():
     return send_from_directory('static', 'login.html')
 
 
+@app.route('/faq')
+def faq_page():
+    """Show FAQ page"""
+    return send_from_directory('static', 'faq.html')
+
+
 @app.route('/auth/github')
 def github_login():
     """Redirect to GitHub OAuth"""

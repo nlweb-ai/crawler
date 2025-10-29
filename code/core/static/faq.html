@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FAQ - Schema Crawler</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 2rem 1rem;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            padding: 3rem 2.5rem;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 0.5rem;
+            text-align: center;
+        }
+
+        .subtitle {
+            color: #7f8c8d;
+            text-align: center;
+            margin-bottom: 3rem;
+            font-size: 0.95rem;
+        }
+
+        .faq-item {
+            margin-bottom: 2.5rem;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid #e1e8ed;
+        }
+
+        .faq-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+        }
+
+        .question {
+            color: #2c3e50;
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+        }
+
+        .answer {
+            color: #4a5568;
+            line-height: 1.7;
+            font-size: 1rem;
+        }
+
+        .answer ol {
+            margin: 1rem 0 1rem 1.5rem;
+        }
+
+        .answer li {
+            margin-bottom: 0.5rem;
+        }
+
+        .answer strong {
+            color: #2c3e50;
+        }
+
+        .code-block {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 4px;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 0.9rem;
+            overflow-x: auto;
+        }
+
+        code {
+            background: #f8f9fa;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.9rem;
+            color: #e83e8c;
+            font-family: 'Monaco', 'Courier New', monospace;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-bottom: 2rem;
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .back-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="back-link">← Back to Login</a>
+
+        <h1>Frequently Asked Questions</h1>
+        <p class="subtitle">Everything you need to know about using the Schema Crawler API</p>
+
+        <div class="faq-item">
+            <div class="question">How do I get an API key?</div>
+            <div class="answer">
+                <p>Getting an API key is completely self-service and takes less than a minute:</p>
+                <ol>
+                    <li><strong>Visit the login page:</strong> <a href="https://testing.nlweb.ai/">https://testing.nlweb.ai/</a></li>
+                    <li><strong>Click "Sign in with GitHub"</strong></li>
+                    <li><strong>Authorize the application</strong> when GitHub prompts you</li>
+                    <li><strong>View your API key:</strong> After login, visit <a href="https://testing.nlweb.ai/api/me">https://testing.nlweb.ai/api/me</a></li>
+                </ol>
+                <p>The system automatically creates your account and generates a unique API key. You can then use this key for all API requests:</p>
+                <div class="code-block">curl -H "X-API-Key: your_api_key" https://testing.nlweb.ai/api/sites</div>
+            </div>
+        </div>
+
+        <div class="faq-item">
+            <div class="question">How do I use the API key?</div>
+            <div class="answer">
+                <p>Include your API key in the <code>X-API-Key</code> header with every API request:</p>
+                <div class="code-block">curl -H "X-API-Key: your_api_key_here" https://testing.nlweb.ai/api/status</div>
+                <p>All API endpoints require authentication using this header.</p>
+            </div>
+        </div>
+
+        <div class="faq-item">
+            <div class="question">What can I do with the API?</div>
+            <div class="answer">
+                <p>The Schema Crawler API allows you to:</p>
+                <ul style="margin-left: 1.5rem; line-height: 1.7;">
+                    <li>Add and manage websites for schema.org data extraction</li>
+                    <li>Submit schema map URLs (sitemaps with schema.org markup)</li>
+                    <li>Monitor crawling status and progress</li>
+                    <li>Access extracted schema.org data from your sites</li>
+                    <li>Remove sites and their associated data</li>
+                </ul>
+                <p style="margin-top: 1rem;">All data is isolated to your account - you only see and manage your own sites.</p>
+            </div>
+        </div>
+
+        <div class="faq-item">
+            <div class="question">Is my data secure?</div>
+            <div class="answer">
+                <p>Yes! The system implements multi-tenant data isolation:</p>
+                <ul style="margin-left: 1.5rem; line-height: 1.7;">
+                    <li>Each user's data is completely isolated in the database</li>
+                    <li>You can only access sites and data associated with your API key</li>
+                    <li>API keys are securely stored and never exposed except to you</li>
+                    <li>All operations are scoped to your user account</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="faq-item">
+            <div class="question">What endpoints are available?</div>
+            <div class="answer">
+                <p>Key API endpoints include:</p>
+                <ul style="margin-left: 1.5rem; line-height: 1.7;">
+                    <li><code>GET /api/me</code> - View your user info and API key</li>
+                    <li><code>GET /api/status</code> - Get status of all your sites</li>
+                    <li><code>GET /api/sites</code> - List your sites</li>
+                    <li><code>POST /api/sites</code> - Add a new site</li>
+                    <li><code>POST /api/sites/{site_url}/schema-files</code> - Add schema map to a site</li>
+                    <li><code>DELETE /api/sites/{site_url}</code> - Remove a site and its data</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="faq-item">
+            <div class="question">Do I need to involve an administrator?</div>
+            <div class="answer">
+                <p>No! The entire process is self-service. You can:</p>
+                <ul style="margin-left: 1.5rem; line-height: 1.7;">
+                    <li>Create your account and get an API key instantly</li>
+                    <li>Add and manage sites independently</li>
+                    <li>Access all features without approval</li>
+                </ul>
+                <p style="margin-top: 1rem;">Just sign in with GitHub and you're ready to go!</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
