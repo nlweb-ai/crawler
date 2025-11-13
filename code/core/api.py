@@ -40,12 +40,26 @@ def faq_page():
     return send_from_directory('static', 'faq.html')
 
 
+@app.route('/api-docs')
+def api_docs_page():
+    """Show API documentation page"""
+    return send_from_directory('static', 'api-docs.html')
+
+
+@app.route('/profile')
+@auth.require_auth
+def profile_page():
+    """Show user profile page"""
+    return send_from_directory('static', 'profile.html')
+
+
 @app.route('/auth/github')
 def github_login():
     """Redirect to GitHub OAuth"""
     if not auth.github:
         return jsonify({'error': 'GitHub OAuth not configured'}), 500
     redirect_uri = url_for('github_callback', _external=True)
+    print(f"[AUTH] GitHub OAuth redirect_uri: {redirect_uri}")
     return auth.github.authorize_redirect(redirect_uri)
 
 
@@ -156,7 +170,9 @@ def microsoft_callback():
 @app.route('/logout')
 def logout():
     """Log out the current user"""
+    from flask import session
     logout_user()
+    session.clear()
     return redirect('/login')
 
 
@@ -191,8 +207,8 @@ def index():
 
 @app.route('/<path:path>')
 def static_files(path):
-    # Allow access to login.html without authentication
-    if path == 'login.html':
+    # Allow access to login.html and api-docs.html without authentication
+    if path in ['login.html', 'api-docs.html', 'faq.html']:
         return send_from_directory('static', path)
     return send_from_directory('static', path)
 
@@ -223,6 +239,9 @@ def add_site():
         if not site_url:
             return jsonify({'error': 'site_url is required'}), 400
 
+        # Normalize site URL
+        site_url = db.normalize_site_url(site_url)
+
         conn = db.get_connection()
         try:
             db.add_site(conn, site_url, user_id, interval_hours)
@@ -244,6 +263,10 @@ def add_site():
 def delete_site(site_url):
     """Remove a site from monitoring by deleting all its schema_maps"""
     user_id = auth.get_current_user()
+
+    # Normalize site URL
+    site_url = db.normalize_site_url(site_url)
+
     conn = db.get_connection()
     try:
         cursor = conn.cursor()
@@ -312,6 +335,9 @@ def add_schema_file(site_url):
     from master import add_schema_map_to_site
     user_id = auth.get_current_user()
 
+    # Normalize site URL
+    site_url = db.normalize_site_url(site_url)
+
     data = request.json
     schema_map_url = data.get('schema_map_url')
 
@@ -341,6 +367,10 @@ def add_schema_file(site_url):
 def delete_schema_file(site_url):
     """Remove a schema map and all its files from a site"""
     user_id = auth.get_current_user()
+
+    # Normalize site URL
+    site_url = db.normalize_site_url(site_url)
+
     data = request.json
     schema_map_url = data.get('schema_map_url')
 
@@ -360,6 +390,33 @@ def delete_schema_file(site_url):
         })
     finally:
         conn.close()
+
+@app.route('/api/sites/<path:site_url>/vector-count', methods=['GET'])
+@auth.require_auth
+def get_site_vector_count(site_url):
+    """Get vector DB count for a site"""
+    user_id = auth.get_current_user()
+    site_url = urllib.parse.unquote(site_url)
+
+    # Normalize site URL
+    site_url = db.normalize_site_url(site_url)
+
+    # Verify user owns this site
+    conn = db.get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT site_url FROM sites WHERE site_url = %s AND user_id = %s", (site_url, user_id))
+        if not cursor.fetchone():
+            return jsonify({'error': 'Site not found'}), 404
+    finally:
+        conn.close()
+
+    # Get count from vector DB
+    from vector_db import vector_db_count_by_site
+    count = vector_db_count_by_site(site_url)
+
+    return jsonify({'site_url': site_url, 'count': count})
+
 
 @app.route('/api/status', methods=['GET'])
 @auth.require_auth
@@ -547,6 +604,10 @@ def get_queue_status():
 def trigger_process(site_url):
     """Manually trigger processing for a site"""
     user_id = auth.get_current_user()
+
+    # Normalize site URL
+    site_url = db.normalize_site_url(site_url)
+
     try:
         # Process in background using asyncio
         if event_loop:
@@ -590,6 +651,10 @@ def stop_scheduler_endpoint():
 def get_site_files(site_url):
     """Get all files for a specific site"""
     user_id = auth.get_current_user()
+
+    # Normalize site URL
+    site_url = db.normalize_site_url(site_url)
+
     conn = db.get_connection()
     try:
         cursor = conn.cursor()

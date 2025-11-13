@@ -3,11 +3,35 @@ from datetime import datetime
 import os
 import threading
 from collections import defaultdict
+import re
 import config  # This will automatically load .env file
 
 # Per-site semaphores to prevent concurrent operations on the same site
 _site_locks = defaultdict(lambda: threading.Semaphore(1))
 _lock_mutex = threading.Lock()  # Mutex to protect the _site_locks dictionary
+
+def normalize_site_url(site_url):
+    """
+    Normalize site URL by removing protocol and www prefix.
+    Examples:
+        https://www.imdb.com -> imdb.com
+        http://example.com -> example.com
+        www.site.org -> site.org
+        site.com -> site.com
+    """
+    if not site_url:
+        return site_url
+
+    # Remove protocol (http:// or https://)
+    url = re.sub(r'^https?://', '', site_url)
+
+    # Remove www. prefix
+    url = re.sub(r'^www\.', '', url)
+
+    # Remove trailing slash
+    url = url.rstrip('/')
+
+    return url
 
 def get_site_lock(site_url):
     """Get or create a semaphore for a specific site"""
@@ -256,6 +280,9 @@ def get_all_sites(conn, user_id):
 
 def add_site(conn, site_url, user_id, interval_hours=24):
     """Add a new site to monitor"""
+    # Normalize site URL
+    site_url = normalize_site_url(site_url)
+
     cursor = conn.cursor()
 
     # Check if site already exists for this user

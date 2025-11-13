@@ -104,7 +104,7 @@ class VectorDB:
             fields = [
                 SimpleField(name="id", type=SearchFieldDataType.String, key=True),  # Hash of URL for Azure Search key
                 SearchableField(name="url", type=SearchFieldDataType.String),  # Original URL (was @id in JSON-LD)
-                SearchableField(name="site", type=SearchFieldDataType.String),
+                SearchField(name="site", type=SearchFieldDataType.String, searchable=True, filterable=True),  # Make site searchable and filterable
                 SearchableField(name="type", type=SearchFieldDataType.String),
                 SearchableField(name="content", type=SearchFieldDataType.String),
                 SimpleField(name="timestamp", type=SearchFieldDataType.DateTimeOffset),
@@ -234,6 +234,24 @@ class VectorDB:
         except Exception as e:
             print(f"Error in batch delete from vector DB: {e}")
 
+    async def count_by_site(self, site: str) -> int:
+        """Count documents for a specific site"""
+        try:
+            if self.search_client:
+                # Use search API with filter to count
+                results = self.search_client.search(
+                    search_text="*",
+                    filter=f"site eq '{site}'",
+                    select="id",
+                    include_total_count=True,
+                    top=0  # We only want the count, not the results
+                )
+                return results.get_count()
+            return 0
+        except Exception as e:
+            print(f"Error counting documents in vector DB: {e}")
+            return 0
+
 
 # Global vector DB instance
 _vector_db = None
@@ -279,3 +297,11 @@ def vector_db_batch_delete(ids: list):
     """
     db = _get_vector_db()
     asyncio.run(db.batch_delete(ids))
+
+
+def vector_db_count_by_site(site: str) -> int:
+    """
+    Count documents for a specific site (synchronous wrapper)
+    """
+    db = _get_vector_db()
+    return asyncio.run(db.count_by_site(site))
