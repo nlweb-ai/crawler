@@ -29,6 +29,100 @@ sys.path.insert(0, os.path.dirname(__file__))
 from embedding_provider.azure_oai_embedding import AzureOpenAIEmbedding
 
 
+def extract_essential_fields(json_obj: dict) -> str:
+    """
+    Extract only essential fields from a schema.org object for embedding.
+    This reduces token usage while preserving searchable content.
+    """
+    essential_fields = {}
+
+    # Always include type and ID
+    if '@type' in json_obj:
+        essential_fields['@type'] = json_obj['@type']
+    if '@id' in json_obj:
+        essential_fields['@id'] = json_obj['@id']
+
+    # Common essential fields across all schema.org types
+    common_fields = ['name', 'description', 'headline', 'text', 'abstract', 'summary']
+    for field in common_fields:
+        if field in json_obj:
+            essential_fields[field] = json_obj[field]
+
+    # Type-specific essential fields
+    obj_type = json_obj.get('@type', '')
+    if isinstance(obj_type, list):
+        obj_type = obj_type[0] if obj_type else ''
+
+    if 'Recipe' in obj_type:
+        # For recipes: include ingredients and basic info, skip detailed instructions
+        recipe_fields = ['recipeIngredient', 'recipeYield', 'totalTime', 'cookTime', 'prepTime',
+                        'recipeCategory', 'recipeCuisine', 'keywords']
+        for field in recipe_fields:
+            if field in json_obj:
+                essential_fields[field] = json_obj[field]
+
+    elif 'Movie' in obj_type or 'TVSeries' in obj_type:
+        # For movies/TV: include basic metadata
+        media_fields = ['genre', 'datePublished', 'director', 'actor', 'duration', 'contentRating']
+        for field in media_fields:
+            if field in json_obj:
+                value = json_obj[field]
+                # For nested objects, just keep the name
+                if isinstance(value, dict) and 'name' in value:
+                    essential_fields[field] = value['name']
+                elif isinstance(value, list):
+                    # For arrays of objects, extract names
+                    essential_fields[field] = [v['name'] if isinstance(v, dict) and 'name' in v else v for v in value[:5]]  # Limit to 5
+                else:
+                    essential_fields[field] = value
+
+    elif 'Product' in obj_type:
+        # For products: include basic product info
+        product_fields = ['brand', 'model', 'offers', 'aggregateRating', 'category']
+        for field in product_fields:
+            if field in json_obj:
+                value = json_obj[field]
+                # Simplify offers and ratings
+                if field == 'offers' and isinstance(value, dict):
+                    essential_fields[field] = {'price': value.get('price'), 'availability': value.get('availability')}
+                elif field == 'aggregateRating' and isinstance(value, dict):
+                    essential_fields[field] = {'ratingValue': value.get('ratingValue'), 'ratingCount': value.get('ratingCount')}
+                else:
+                    essential_fields[field] = value
+
+    elif 'Article' in obj_type or 'NewsArticle' in obj_type:
+        # For articles: include metadata and abstract
+        article_fields = ['author', 'datePublished', 'publisher', 'articleSection']
+        for field in article_fields:
+            if field in json_obj:
+                value = json_obj[field]
+                if isinstance(value, dict) and 'name' in value:
+                    essential_fields[field] = value['name']
+                else:
+                    essential_fields[field] = value
+
+    # Convert to JSON string
+    essential_json = json.dumps(essential_fields)
+
+    # If still too large (>6000 chars ~= ~6000 tokens with overhead), truncate
+    MAX_CHARS = 6000
+    if len(essential_json) > MAX_CHARS:
+        # Try with just the most basic fields
+        minimal_fields = {
+            '@type': essential_fields.get('@type'),
+            '@id': essential_fields.get('@id'),
+            'name': essential_fields.get('name', '')[:500],  # Truncate name
+            'description': essential_fields.get('description', '')[:1000]  # Truncate description
+        }
+        essential_json = json.dumps(minimal_fields)
+
+        # Final truncation if still too large
+        if len(essential_json) > MAX_CHARS:
+            essential_json = essential_json[:MAX_CHARS]
+
+    return essential_json
+
+
 class EmbeddingWrapper:
     """Wrapper for handling embeddings with different providers"""
 
@@ -208,7 +302,8 @@ class VectorDB:
             all_embeddings = []
             for i in range(0, len(items), embedding_batch_size):
                 batch_items = items[i:i + embedding_batch_size]
-                texts = [json.dumps(obj) for _, _, obj in batch_items]
+                # Extract essential fields instead of using full JSON
+                texts = [extract_essential_fields(obj) for _, _, obj in batch_items]
                 print(f"[Vector DB] Batch {i//embedding_batch_size + 1}: Generating embeddings for {len(batch_items)} items...")
                 batch_embeddings = await self.embedding_wrapper.batch_get_embeddings(texts)
                 all_embeddings.extend(batch_embeddings)
