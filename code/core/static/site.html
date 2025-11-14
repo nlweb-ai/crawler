@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Site Details - Schema.org Crawler</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .back-link {
+            color: #667eea;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            margin-bottom: 20px;
+        }
+
+        .back-link:hover {
+            text-decoration: underline;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-card h3 {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+
+        .stat-card .value {
+            color: #333;
+            font-size: 32px;
+            font-weight: bold;
+        }
+
+        .files-section {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .files-section h2 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            background: #f8f9fa;
+            color: #333;
+            font-weight: 600;
+            text-align: left;
+            padding: 12px;
+            border-bottom: 2px solid #dee2e6;
+        }
+
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        tr:hover {
+            background: #f8f9fa;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .status.completed {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status.pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .url-cell {
+            word-break: break-all;
+            max-width: 400px;
+        }
+
+        .time-cell {
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/profile.html" class="back-link">← Back to Dashboard</a>
+
+        <div class="header">
+            <h1 id="siteName">Loading...</h1>
+        </div>
+
+        <div id="errorMessage" class="error-message" style="display: none;"></div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Total Files</h3>
+                <div class="value" id="totalFiles">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>Total Items (DB)</h3>
+                <div class="value" id="totalItems">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>Vector DB Items</h3>
+                <div class="value" id="vectorDBItems">-</div>
+            </div>
+        </div>
+
+        <div class="files-section">
+            <h2>Files</h2>
+            <div id="filesContent">
+                <div class="loading">Loading files...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin + '/api';
+        const apiKey = localStorage.getItem('apiKey');
+
+        if (!apiKey) {
+            window.location.href = '/login.html';
+        }
+
+        // Get site URL from query parameter
+        const urlParams = new URLSearchParams(window.location.search);
+        const siteUrl = urlParams.get('site');
+
+        if (!siteUrl) {
+            document.getElementById('errorMessage').textContent = 'No site specified';
+            document.getElementById('errorMessage').style.display = 'block';
+        } else {
+            loadSiteDetails();
+        }
+
+        async function loadSiteDetails() {
+            try {
+                const response = await fetch(`${API_BASE}/sites/${encodeURIComponent(siteUrl)}`, {
+                    headers: {
+                        'X-API-Key': apiKey
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Failed to load site details: ${response.status}`);
+                }
+
+                const data = await response.json();
+                displaySiteDetails(data);
+            } catch (error) {
+                console.error('Error loading site details:', error);
+                document.getElementById('errorMessage').textContent = error.message;
+                document.getElementById('errorMessage').style.display = 'block';
+                document.getElementById('filesContent').innerHTML = '<div class="loading">Failed to load files</div>';
+            }
+        }
+
+        function displaySiteDetails(data) {
+            // Update header
+            document.getElementById('siteName').textContent = data.site_url;
+
+            // Calculate total items
+            const totalItems = data.files.reduce((sum, file) => sum + (file.item_count || 0), 0);
+
+            // Update stats
+            document.getElementById('totalFiles').textContent = data.files.length;
+            document.getElementById('totalItems').textContent = totalItems.toLocaleString();
+            document.getElementById('vectorDBItems').textContent = data.vector_db_count.toLocaleString();
+
+            // Display files table
+            if (data.files.length === 0) {
+                document.getElementById('filesContent').innerHTML = '<p style="color: #666;">No files found for this site.</p>';
+                return;
+            }
+
+            const table = document.createElement('table');
+            table.innerHTML = `
+                <thead>
+                    <tr>
+                        <th>File URL</th>
+                        <th>Items</th>
+                        <th>Last Read</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${data.files.map(file => `
+                        <tr>
+                            <td class="url-cell">${escapeHtml(file.url)}</td>
+                            <td>${(file.item_count || 0).toLocaleString()}</td>
+                            <td class="time-cell">${file.last_read ? formatDate(file.last_read) : 'Never'}</td>
+                            <td><span class="status ${file.status || 'pending'}">${file.status || 'pending'}</span></td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            `;
+            document.getElementById('filesContent').innerHTML = '';
+            document.getElementById('filesContent').appendChild(table);
+        }
+
+        function formatDate(dateString) {
+            if (!dateString) return 'Never';
+            const date = new Date(dateString);
+            return date.toLocaleString();
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Site Details - Schema Crawler</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: #2c3e50;
+            color: white;
+            padding: 1.5rem 0;
+            margin-bottom: 2rem;
+        }
+
+        header .container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        h1 {
+            font-size: 1.8rem;
+            margin-bottom: 0.5rem;
+        }
+
+        h2 {
+            color: #2c3e50;
+            margin: 1.5rem 0 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #3498db;
+        }
+
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            margin-left: 1.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+
+        .nav-links a:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .section {
+            background: white;
+            border-radius: 8px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .site-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 2rem;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid #e1e8ed;
+        }
+
+        .site-url {
+            font-family: monospace;
+            font-size: 1.3rem;
+            color: #3498db;
+            font-weight: 600;
+            word-break: break-all;
+        }
+
+        .site-meta {
+            color: #7f8c8d;
+            margin-top: 0.5rem;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+
+        .schema-maps-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        .schema-maps-table th,
+        .schema-maps-table td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid #e1e8ed;
+        }
+
+        .schema-maps-table th {
+            background: #ecf0f1;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        .schema-maps-table tr:hover {
+            background: #f8f9fa;
+        }
+
+        .schema-map-url {
+            font-family: monospace;
+            color: #3498db;
+            font-size: 0.9rem;
+            word-break: break-all;
+        }
+
+        .files-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        .files-table th,
+        .files-table td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid #e1e8ed;
+            font-size: 0.9rem;
+        }
+
+        .files-table th {
+            background: #ecf0f1;
+            font-weight: 600;
+            color: #2c3e50;
+            position: sticky;
+            top: 0;
+        }
+
+        .files-table tr:hover {
+            background: #f8f9fa;
+        }
+
+        .file-url {
+            font-family: monospace;
+            color: #555;
+            font-size: 0.85rem;
+            word-break: break-all;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.6rem;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .badge-manual {
+            background: #3498db;
+            color: white;
+        }
+
+        .badge-auto {
+            background: #95a5a6;
+            color: white;
+        }
+
+        .badge-active {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #7f8c8d;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: #7f8c8d;
+        }
+
+        .empty-state-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+
+        button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.95rem;
+            font-weight: 600;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: #2980b9;
+        }
+
+        button.danger {
+            background: #e74c3c;
+        }
+
+        button.danger:hover {
+            background: #c0392b;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .filter-section {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+        }
+
+        .filter-section input {
+            padding: 0.5rem 1rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 100%;
+            max-width: 400px;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div>
+                <h1>🌐 Site Details</h1>
+                <p id="breadcrumb" style="opacity: 0.9; margin-top: 0.5rem;">
+                    <a href="/profile" style="color: white; text-decoration: none;">My Profile</a>
+                    &gt; Site Details
+                </p>
+            </div>
+            <div class="nav-links">
+                <a href="/">Dashboard</a>
+                <a href="/profile">Profile</a>
+                <a href="/logout">Logout</a>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- Site Header -->
+        <div class="section">
+            <div class="site-header">
+                <div>
+                    <div class="site-url" id="siteUrl">Loading...</div>
+                    <div class="site-meta">
+                        <span>Last processed: <strong id="lastProcessed">-</strong></span>
+                        <span style="margin-left: 2rem;">Status: <strong id="siteStatus">-</strong></span>
+                    </div>
+                </div>
+                <div class="action-buttons">
+                    <button onclick="processSite()">🔄 Process Now</button>
+                    <button class="danger" onclick="deleteSite()">🗑️ Delete Site</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statistics -->
+        <div class="section">
+            <h2>📊 Site Statistics</h2>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="totalSchemaMaps">0</div>
+                    <div class="stat-label">Schema Maps</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="totalFiles">0</div>
+                    <div class="stat-label">Total Files</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="totalIds">0</div>
+                    <div class="stat-label">Total IDs</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="vectorDbCount">0</div>
+                    <div class="stat-label">In Vector DB</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Schema Maps -->
+        <div class="section">
+            <h2>📄 Schema Maps</h2>
+            <div id="schemaMapsLoading" class="loading">Loading schema maps...</div>
+            <div id="schemaMapsEmpty" class="empty-state" style="display: none;">
+                <div class="empty-state-icon">📭</div>
+                <h3>No schema maps found</h3>
+                <p>This site doesn't have any schema maps yet.</p>
+            </div>
+            <table class="schema-maps-table" id="schemaMapsTable" style="display: none;">
+                <thead>
+                    <tr>
+                        <th>Schema Map URL</th>
+                        <th>Files</th>
+                        <th>Total Items</th>
+                    </tr>
+                </thead>
+                <tbody id="schemaMapsTableBody">
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Files -->
+        <div class="section">
+            <h2>📁 All Files</h2>
+            <div class="filter-section">
+                <input type="text" id="fileFilter" placeholder="🔍 Filter files by URL..." onkeyup="filterFiles()">
+            </div>
+            <div id="filesLoading" class="loading">Loading files...</div>
+            <div id="filesEmpty" class="empty-state" style="display: none;">
+                <div class="empty-state-icon">📭</div>
+                <h3>No files found</h3>
+            </div>
+            <div style="max-height: 600px; overflow-y: auto;">
+                <table class="files-table" id="filesTable" style="display: none;">
+                    <thead>
+                        <tr>
+                            <th>File URL</th>
+                            <th>Schema Map</th>
+                            <th>Items</th>
+                            <th>Last Read</th>
+                            <th>Type</th>
+                        </tr>
+                    </thead>
+                    <tbody id="filesTableBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Get site URL from query parameter
+        const urlParams = new URLSearchParams(window.location.search);
+        const siteUrl = decodeURIComponent(urlParams.get('url'));
+
+        if (!siteUrl || siteUrl === 'null') {
+            alert('No site URL provided');
+            window.location.href = '/profile';
+        }
+
+        // Display site URL
+        document.getElementById('siteUrl').textContent = siteUrl;
+
+        let allFiles = [];
+
+        // Load site details and statistics
+        async function loadSiteDetails() {
+            try {
+                // Get site status
+                const statusResponse = await fetch('/api/status');
+                if (!statusResponse.ok) throw new Error('Failed to load status');
+
+                const statusData = await statusResponse.json();
+                const site = statusData.sites.find(s => s.site_url === siteUrl);
+
+                if (!site) {
+                    alert('Site not found or you do not have access to it');
+                    window.location.href = '/profile';
+                    return;
+                }
+
+                // Update site header
+                document.getElementById('lastProcessed').textContent = site.last_processed
+                    ? new Date(site.last_processed).toLocaleString()
+                    : 'Never';
+                document.getElementById('siteStatus').textContent = site.is_active ? 'Active' : 'Inactive';
+                document.getElementById('siteStatus').style.color = site.is_active ? '#27ae60' : '#e74c3c';
+
+                // Update basic statistics
+                document.getElementById('totalFiles').textContent = (site.total_files || 0).toLocaleString();
+                document.getElementById('totalIds').textContent = (site.total_ids || 0).toLocaleString();
+
+                // Get vector DB count
+                loadVectorDbCount();
+
+            } catch (error) {
+                console.error('Error loading site details:', error);
+                alert('Error loading site details');
+            }
+        }
+
+        // Load vector DB count for this site
+        async function loadVectorDbCount() {
+            try {
+                const response = await fetch(`/api/sites/${encodeURIComponent(siteUrl)}/vector-count`);
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('vectorDbCount').textContent = (data.count || 0).toLocaleString();
+                }
+            } catch (error) {
+                console.error('Error loading vector DB count:', error);
+                document.getElementById('vectorDbCount').textContent = 'N/A';
+            }
+        }
+
+        // Load files for this site
+        async function loadFiles() {
+            try {
+                const response = await fetch(`/api/sites/${encodeURIComponent(siteUrl)}/files`);
+                if (!response.ok) throw new Error('Failed to load files');
+
+                const files = await response.json();
+                allFiles = files;
+
+                document.getElementById('filesLoading').style.display = 'none';
+
+                if (files.length === 0) {
+                    document.getElementById('filesEmpty').style.display = 'block';
+                    return;
+                }
+
+                // Group files by schema_map
+                const schemaMapGroups = {};
+                files.forEach(file => {
+                    const schemaMap = file.schema_map || 'Unknown';
+                    if (!schemaMapGroups[schemaMap]) {
+                        schemaMapGroups[schemaMap] = {
+                            files: [],
+                            totalItems: 0
+                        };
+                    }
+                    schemaMapGroups[schemaMap].files.push(file);
+                    schemaMapGroups[schemaMap].totalItems += file.number_of_items || 0;
+                });
+
+                // Update schema maps count
+                document.getElementById('totalSchemaMaps').textContent = Object.keys(schemaMapGroups).length;
+
+                // Populate schema maps table
+                document.getElementById('schemaMapsLoading').style.display = 'none';
+                document.getElementById('schemaMapsTable').style.display = 'table';
+                const schemaMapsBody = document.getElementById('schemaMapsTableBody');
+                schemaMapsBody.innerHTML = '';
+
+                Object.entries(schemaMapGroups).forEach(([schemaMapUrl, data]) => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td><div class="schema-map-url">${schemaMapUrl}</div></td>
+                        <td>${data.files.length}</td>
+                        <td>${data.totalItems.toLocaleString()}</td>
+                    `;
+                    schemaMapsBody.appendChild(row);
+                });
+
+                // Populate files table
+                renderFiles(files);
+
+            } catch (error) {
+                console.error('Error loading files:', error);
+                document.getElementById('filesLoading').innerHTML = '<span style="color: #e74c3c;">Error loading files</span>';
+            }
+        }
+
+        // Render files table
+        function renderFiles(files) {
+            document.getElementById('filesTable').style.display = 'table';
+            const tbody = document.getElementById('filesTableBody');
+            tbody.innerHTML = '';
+
+            files.forEach(file => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td><div class="file-url">${file.file_url}</div></td>
+                    <td><div class="file-url">${file.schema_map || 'N/A'}</div></td>
+                    <td>${(file.number_of_items || 0).toLocaleString()}</td>
+                    <td>${file.last_read_time ? new Date(file.last_read_time).toLocaleString() : 'Never'}</td>
+                    <td>
+                        <span class="badge ${file.is_manual ? 'badge-manual' : 'badge-auto'}">
+                            ${file.is_manual ? 'Manual' : 'Auto'}
+                        </span>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        // Filter files
+        function filterFiles() {
+            const filter = document.getElementById('fileFilter').value.toLowerCase();
+            const filteredFiles = allFiles.filter(file =>
+                file.file_url.toLowerCase().includes(filter) ||
+                (file.schema_map && file.schema_map.toLowerCase().includes(filter))
+            );
+            renderFiles(filteredFiles);
+        }
+
+        // Process site
+        async function processSite() {
+            if (!confirm('Trigger processing for this site now?')) return;
+
+            try {
+                const response = await fetch(`/api/process/${encodeURIComponent(siteUrl)}`, {
+                    method: 'POST'
+                });
+
+                if (response.ok) {
+                    alert('Processing started! Check back in a few minutes.');
+                    loadSiteDetails();
+                } else {
+                    alert('Failed to trigger processing');
+                }
+            } catch (error) {
+                console.error('Error processing site:', error);
+                alert('Error triggering processing');
+            }
+        }
+
+        // Delete site
+        async function deleteSite() {
+            if (!confirm(`Are you sure you want to delete this site?\n\n${siteUrl}\n\nThis will remove all files, IDs, and vector DB entries.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/sites/${encodeURIComponent(siteUrl)}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    alert('Site deleted successfully');
+                    window.location.href = '/profile';
+                } else {
+                    alert('Failed to delete site');
+                }
+            } catch (error) {
+                console.error('Error deleting site:', error);
+                alert('Error deleting site');
+            }
+        }
+
+        // Load everything on page load
+        loadSiteDetails();
+        loadFiles();
+
+        // Refresh every 30 seconds
+        setInterval(() => {
+            loadSiteDetails();
+            loadFiles();
+        }, 30000);
+    </script>
+</body>
+</html>

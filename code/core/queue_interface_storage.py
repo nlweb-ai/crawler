@@ -86,6 +86,15 @@ class AzureStorageQueueAAD(QueueInterface):
             print(f"[Storage Queue AAD] Error returning message: {e}")
             return False
 
+    def get_message_count(self) -> int:
+        """Get approximate number of messages in queue"""
+        try:
+            properties = self.queue_client.get_queue_properties()
+            return properties.approximate_message_count
+        except Exception as e:
+            print(f"[Storage Queue AAD] Error getting message count: {e}")
+            return -1
+
 
 def ensure_queue_exists(storage_account_name: str, queue_name: str = 'crawler-jobs'):
     """

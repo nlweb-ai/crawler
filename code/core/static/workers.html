@@ -236,6 +236,11 @@
                     let lastJob = '-';
                     let statusLink = '';
 
+                    // Count pod as running if phase is Running
+                    if (worker.phase && worker.phase.toLowerCase() === 'running') {
+                        runningCount++;
+                    }
+
                     if (worker.status) {
                         const status = worker.status.status || 'unknown';
                         statusBadge = `<span class="status-badge status-${status}">${status}</span>`;
@@ -243,7 +248,6 @@
                         jobsFailed = worker.status.total_jobs_failed || 0;
                         totalJobs += jobsProcessed;
 
-                        if (status === 'running' || status === 'waiting') runningCount++;
                         if (status === 'processing') processingCount++;
 
                         if (worker.status.current_job) {

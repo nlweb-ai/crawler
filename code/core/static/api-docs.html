@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Documentation - Schema Crawler</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: #2c3e50;
+            color: white;
+            padding: 2rem 0;
+            margin-bottom: 2rem;
+        }
+
+        header .container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        h1 {
+            font-size: 1.8rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            margin-left: 1.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+
+        .nav-links a:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .section {
+            background: white;
+            border-radius: 8px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        h2 {
+            color: #2c3e50;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #3498db;
+        }
+
+        h3 {
+            color: #34495e;
+            margin: 1.5rem 0 0.75rem 0;
+            font-size: 1.3rem;
+        }
+
+        h4 {
+            color: #555;
+            margin: 1rem 0 0.5rem 0;
+            font-size: 1.1rem;
+        }
+
+        .toc {
+            background: #ecf0f1;
+            padding: 1.5rem;
+            border-radius: 6px;
+            margin-bottom: 2rem;
+        }
+
+        .toc ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .toc li {
+            margin: 0.5rem 0;
+        }
+
+        .toc a {
+            color: #3498db;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .toc a:hover {
+            text-decoration: underline;
+        }
+
+        .endpoint {
+            background: #f8f9fa;
+            border-left: 4px solid #3498db;
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+            border-radius: 4px;
+        }
+
+        .method {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 0.85rem;
+            margin-right: 0.5rem;
+        }
+
+        .method.get { background: #27ae60; color: white; }
+        .method.post { background: #3498db; color: white; }
+        .method.delete { background: #e74c3c; color: white; }
+
+        .endpoint-path {
+            font-family: 'Courier New', monospace;
+            font-size: 1.1rem;
+            color: #2c3e50;
+            font-weight: 600;
+        }
+
+        code {
+            background: #2c3e50;
+            color: #f8f9fa;
+            padding: 0.2rem 0.5rem;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+        }
+
+        pre {
+            background: #2c3e50;
+            color: #f8f9fa;
+            padding: 1rem;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 1rem 0;
+        }
+
+        pre code {
+            background: none;
+            padding: 0;
+        }
+
+        .note {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 4px;
+        }
+
+        .note strong {
+            color: #856404;
+        }
+
+        .success {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 4px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+        }
+
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid #e1e8ed;
+        }
+
+        th {
+            background: #ecf0f1;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        tr:hover {
+            background: #f8f9fa;
+        }
+
+        .param-name {
+            font-family: 'Courier New', monospace;
+            color: #e74c3c;
+            font-weight: 600;
+        }
+
+        .param-type {
+            font-family: 'Courier New', monospace;
+            color: #3498db;
+            font-size: 0.9rem;
+        }
+
+        .required {
+            color: #e74c3c;
+            font-weight: bold;
+            font-size: 0.85rem;
+        }
+
+        .optional {
+            color: #95a5a6;
+            font-size: 0.85rem;
+        }
+
+        .api-key-box {
+            background: #e8f5e9;
+            border: 2px solid #4caf50;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin: 1.5rem 0;
+        }
+
+        .api-key-box h4 {
+            color: #2e7d32;
+            margin-top: 0;
+        }
+
+        .copy-btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            margin-left: 0.5rem;
+        }
+
+        .copy-btn:hover {
+            background: #2980b9;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div>
+                <h1>📚 API Documentation</h1>
+                <p>Schema.org Crawler REST API Reference</p>
+            </div>
+            <div class="nav-links">
+                <a href="/">Dashboard</a>
+                <a href="/login" id="loginLogoutLink">Login</a>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- Quick Start -->
+        <div class="section">
+            <h2>🚀 Quick Start</h2>
+
+            <h3>Step 1: Get Your API Key</h3>
+            <ol>
+                <li>Go to <a href="/login">/login</a> and sign in with GitHub</li>
+                <li>After login, go to <a href="/">Dashboard</a></li>
+                <li>Click on your profile/user menu</li>
+                <li>Copy your API key (auto-generated on first login)</li>
+            </ol>
+
+            <div class="api-key-box" id="apiKeySection" style="display: none;">
+                <h4>✅ Your API Key</h4>
+                <p>Logged in as: <strong id="userName"></strong></p>
+                <code id="apiKeyDisplay" style="font-size: 1rem; padding: 0.5rem 1rem;">Loading...</code>
+                <button class="copy-btn" onclick="copyApiKey()">Copy</button>
+            </div>
+
+            <h3>Step 2: Make Your First API Call</h3>
+            <pre><code>curl https://testing.nlweb.ai/api/status \
+  -H "X-API-Key: YOUR_API_KEY_HERE"</code></pre>
+
+            <div class="success">
+                <strong>✓ That's it!</strong> You're ready to use all API endpoints.
+            </div>
+        </div>
+
+        <!-- Table of Contents -->
+        <div class="section">
+            <h2>📖 Table of Contents</h2>
+            <div class="toc">
+                <ul>
+                    <li><a href="#authentication">Authentication</a></li>
+                    <li><a href="#sites">Sites API</a>
+                        <ul style="margin-left: 1.5rem; margin-top: 0.5rem;">
+                            <li><a href="#get-sites">GET /api/sites</a> - List all sites</li>
+                            <li><a href="#add-site">POST /api/sites</a> - Add a site</li>
+                            <li><a href="#delete-site">DELETE /api/sites/{url}</a> - Delete a site</li>
+                            <li><a href="#process-site">POST /api/process/{url}</a> - Trigger processing</li>
+                        </ul>
+                    </li>
+                    <li><a href="#schema-files">Schema Files API</a>
+                        <ul style="margin-left: 1.5rem; margin-top: 0.5rem;">
+                            <li><a href="#add-schema-map">POST /api/sites/{url}/schema-files</a> - Add schema map</li>
+                            <li><a href="#delete-schema-map">DELETE /api/sites/{url}/schema-files</a> - Delete schema map</li>
+                            <li><a href="#get-site-files">GET /api/sites/{url}/files</a> - List site files</li>
+                        </ul>
+                    </li>
+                    <li><a href="#files">Files API</a>
+                        <ul style="margin-left: 1.5rem; margin-top: 0.5rem;">
+                            <li><a href="#get-all-files">GET /api/files</a> - List all files</li>
+                            <li><a href="#get-file-ids">GET /api/files/{url}/ids</a> - Get file IDs</li>
+                        </ul>
+                    </li>
+                    <li><a href="#monitoring">Monitoring API</a>
+                        <ul style="margin-left: 1.5rem; margin-top: 0.5rem;">
+                            <li><a href="#get-status">GET /api/status</a> - System status</li>
+                            <li><a href="#get-queue-status">GET /api/queue/status</a> - Queue status</li>
+                            <li><a href="#get-workers">GET /api/workers</a> - Worker status</li>
+                        </ul>
+                    </li>
+                    <li><a href="#user">User API</a>
+                        <ul style="margin-left: 1.5rem; margin-top: 0.5rem;">
+                            <li><a href="#get-me">GET /api/me</a> - Get your user info & API key</li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Authentication -->
+        <div class="section" id="authentication">
+            <h2>🔐 Authentication</h2>
+
+            <p>All API endpoints (except login/logout) require authentication. You can authenticate in two ways:</p>
+
+            <h3>Method 1: API Key (Recommended for Programmatic Access)</h3>
+            <p>Include your API key in the <code>X-API-Key</code> header:</p>
+            <pre><code>curl https://testing.nlweb.ai/api/sites \
+  -H "X-API-Key: YOUR_API_KEY_HERE"</code></pre>
+
+            <h3>Method 2: OAuth Session (For Web UI)</h3>
+            <p>Login via GitHub OAuth at <a href="/login">/login</a>. The session cookie will authenticate your requests.</p>
+
+            <h3>Getting Your API Key</h3>
+            <ol>
+                <li><strong>Login via OAuth:</strong> Go to <a href="/login">/login</a> and sign in with GitHub</li>
+                <li><strong>Retrieve your key:</strong> Make a request to <code>GET /api/me</code> (works with session cookie)</li>
+                <li><strong>Use the key:</strong> Copy the <code>api_key</code> from the response</li>
+            </ol>
+
+            <pre><code># Get your API key (after OAuth login)
+curl https://testing.nlweb.ai/api/me \
+  --cookie "session=YOUR_SESSION_COOKIE"
+
+# Response:
+{
+  "user_id": "github:12345",
+  "email": "user@example.com",
+  "name": "Your Name",
+  "provider": "github",
+  "api_key": "Abc123XyZ_YourApiKeyHere...",
+  "created_at": "2024-01-15T10:30:00",
+  "last_login": "2024-01-20T14:22:00"
+}</code></pre>
+
+            <div class="note">
+                <strong>Note:</strong> API keys are auto-generated when you first login with OAuth. They never expire and are unique per user.
+            </div>
+        </div>
+
+        <!-- Sites API -->
+        <div class="section" id="sites">
+            <h2>🌐 Sites API</h2>
+
+            <!-- GET /api/sites -->
+            <div class="endpoint" id="get-sites">
+                <div>
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/api/sites</span>
+                </div>
+                <p style="margin-top: 0.5rem;">List all sites you're monitoring.</p>
+
+                <h4>Request</h4>
+                <pre><code>curl https://testing.nlweb.ai/api/sites \
+  -H "X-API-Key: YOUR_API_KEY"</code></pre>
+
+                <h4>Response</h4>
+                <pre><code>[
+  {
+    "site_url": "https://example.com",
+    "process_interval_hours": 24,
+    "last_processed": "2024-01-20T10:30:00",
+    "is_active": true,
+    "created_at": "2024-01-15T08:00:00"
+  }
+]</code></pre>
+            </div>
+
+            <!-- POST /api/sites -->
+            <div class="endpoint" id="add-site">
+                <div>
+                    <span class="method post">POST</span>
+                    <span class="endpoint-path">/api/sites</span>
+                </div>
+                <p style="margin-top: 0.5rem;">Add a new site to monitor. The crawler will automatically discover schema maps from robots.txt.</p>
+
+                <h4>Request Body</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Parameter</th>
+                            <th>Type</th>
+                            <th>Required</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="param-name">site_url</td>
+                            <td class="param-type">string</td>
+                            <td class="required">Required</td>
+                            <td>Full URL of the site (e.g., https://example.com)</td>
+                        </tr>
+                        <tr>
+                            <td class="param-name">interval_hours</td>
+                            <td class="param-type">integer</td>
+                            <td class="optional">Optional</td>
+                            <td>How often to reprocess (default: 24 hours)</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>Example</h4>
+                <pre><code>curl -X POST https://testing.nlweb.ai/api/sites \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "site_url": "https://example.com",
+    "interval_hours": 24
+  }'</code></pre>
+
+                <h4>Response</h4>
+                <pre><code>{
+  "success": true,
+  "site_url": "https://example.com"
+}</code></pre>
+
+                <div class="note">
+                    <strong>What happens next:</strong> The crawler will fetch <code>https://example.com/robots.txt</code>, look for <code>schemaMap:</code> directives, download the schema maps, and queue all JSON-LD files for processing.
+                </div>
+            </div>
+
+            <!-- DELETE /api/sites/{url} -->
+            <div class="endpoint" id="delete-site">
+                <div>
+                    <span class="method delete">DELETE</span>
+                    <span class="endpoint-path">/api/sites/{url}</span>
+                </div>
+                <p style="margin-top: 0.5rem;">Remove a site from monitoring. This deletes all files, IDs, and vector DB entries.</p>
+
+                <h4>URL Parameters</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Parameter</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="param-name">url</td>
+                            <td>URL-encoded site URL (e.g., <code>https%3A%2F%2Fexample.com</code>)</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>Example</h4>
+                <pre><code>curl -X DELETE "https://testing.nlweb.ai/api/sites/https%3A%2F%2Fexample.com" \
+  -H "X-API-Key: YOUR_API_KEY"</code></pre>
+
+                <h4>Response</h4>
+                <pre><code>{
+  "success": true,
+  "schema_maps_removed": 2,
+  "files_queued_for_removal": 150
+}</code></pre>
+            </div>
+
+            <!-- POST /api/process/{url} -->
+            <div class="endpoint" id="process-site">
+                <div>
+                    <span class="method post">POST</span>
+                    <span class="endpoint-path">/api/process/{url}</span>
+                </div>
+                <p style="margin-top: 0.5rem;">Manually trigger processing for a site (bypasses scheduled interval).</p>
+
+                <h4>Example</h4>
+                <pre><code>curl -X POST "https://testing.nlweb.ai/api/process/https%3A%2F%2Fexample.com" \
+  -H "X-API-Key: YOUR_API_KEY"</code></pre>
+
+                <h4>Response</h4>
+                <pre><code>{
+  "success": true,
+  "message": "Processing started for https://example.com"
+}</code></pre>
+            </div>
+        </div>
+
+        <!-- Schema Files API -->
+        <div class="section" id="schema-files">
+            <h2>📄 Schema Files API</h2>
+
+            <!-- POST /api/sites/{url}/schema-files -->
+            <div class="endpoint" id="add-schema-map">
+                <div>
+                    <span class="method post">POST</span>
+                    <span class="endpoint-path">/api/sites/{url}/schema-files</span>
+                </div>
+                <p style="margin-top: 0.5rem;">Manually add a specific schema map to a site (useful if not in robots.txt).</p>
+
+                <h4>Request Body</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Parameter</th>
+                            <th>Type</th>
+                            <th>Required</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="param-name">schema_map_url</td>
+                            <td class="param-type">string</td>
+                            <td class="required">Required</td>
+                            <td>Full URL to the schema_map.xml file</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>Example</h4>
+                <pre><code>curl -X POST "https://testing.nlweb.ai/api/sites/https%3A%2F%2Fexample.com/schema-files" \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "schema_map_url": "https://example.com/custom_schema_map.xml"
+  }'</code></pre>
+
+                <h4>Response</h4>
+                <pre><code>{
+  "success": true,
+  "site_url": "https://example.com",
+  "schema_map_url": "https://example.com/custom_schema_map.xml",
+  "files_added": 50,
+  "files_queued": 50
+}</code></pre>
+            </div>
+
+            <!-- DELETE /api/sites/{url}/schema-files -->
+            <div class="endpoint" id="delete-schema-map">
+                <div>
+                    <span class="method delete">DELETE</span>
+                    <span class="endpoint-path">/api/sites/{url}/schema-files</span>
+                </div>
+                <p style="margin-top: 0.5rem;">Remove a specific schema map and all its files from a site.</p>
+
+                <h4>Request Body</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Parameter</th>
+                            <th>Type</th>
+                            <th>Required</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="param-name">schema_map_url</td>
+                            <td class="param-type">string</td>
+                            <td class="required">Required</td>
+                            <td>URL of the schema map to remove</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>Example</h4>
+                <pre><code>curl -X DELETE "https://testing.nlweb.ai/api/sites/https%3A%2F%2Fexample.com/schema-files" \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "schema_map_url": "https://example.com/custom_schema_map.xml"
+  }'</code></pre>
+
+                <h4>Response</h4>
+                <pre><code>{
+  "success": true,
+  "deleted_count": 50,
+  "files_queued_for_removal": 50
+}</code></pre>
+            </div>
+
+            <!-- GET /api/sites/{url}/files -->
+            <div class="endpoint" id="get-site-files">
+                <div>
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/api/sites/{url}/files</span>
+                </div>
+                <p style="margin-top: 0.5rem;">Get all files for a specific site.</p>
+
+                <h4>Example</h4>
+                <pre><code>curl "https://testing.nlweb.ai/api/sites/https%3A%2F%2Fexample.com/files" \
+  -H "X-API-Key: YOUR_API_KEY"</code></pre>
+
+                <h4>Response</h4>
+                <pre><code>[
+  {
+    "file_url": "https://example.com/schema/products/1.json",
+    "schema_map": "https://example.com/schema_map.xml",
+    "last_read_time": "2024-01-20T10:30:00",
+    "number_of_items": 25,
+    "is_manual": false,
+    "is_active": true
+  }
+]</code></pre>
+            </div>
+        </div>
+
+        <!-- Files API -->
+        <div class="section" id="files">
+            <h2>📁 Files API</h2>
+
+            <!-- GET /api/files -->
+            <div class="endpoint" id="get-all-files">
+                <div>
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/api/files</span>
+                </div>
+                <p style="margin-top: 0.5rem;">Get all files across all your sites.</p>
+
+                <h4>Example</h4>
+                <pre><code>curl https://testing.nlweb.ai/api/files \
+  -H "X-API-Key: YOUR_API_KEY"</code></pre>
+
+                <h4>Response</h4>
+                <pre><code>[
+  {
+    "site_url": "https://example.com",
+    "file_url": "https://example.com/schema/products/1.json",
+    "schema_map": "https://example.com/schema_map.xml",
+    "is_active": true,
+    "is_manual": false,
+    "number_of_items": 25,
+    "last_read_time": "2024-01-20T10:30:00",
+    "id_count": 25
+  }
+]</code></pre>
+            </div>
+
+            <!-- GET /api/files/{url}/ids -->
+            <div class="endpoint" id="get-file-ids">
+                <div>
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/api/files/{url}/ids</span>
+                </div>
+                <p style="margin-top: 0.5rem;">Get all @id values from a specific JSON-LD file.</p>
+
+                <h4>Example</h4>
+                <pre><code>curl "https://testing.nlweb.ai/api/files/https%3A%2F%2Fexample.com%2Fschema%2Fproducts%2F1.json/ids" \
+  -H "X-API-Key: YOUR_API_KEY"</code></pre>
+
+                <h4>Response</h4>
+                <pre><code>{
+  "file_url": "https://example.com/schema/products/1.json",
+  "ids": [
+    "https://example.com/product/123",
+    "https://example.com/product/124",
+    "https://example.com/offer/456"
+  ],
+  "count": 3
+}</code></pre>
+            </div>
+        </div>
+
+        <!-- Monitoring API -->
+        <div class="section" id="monitoring">
+            <h2>📊 Monitoring API</h2>
+
+            <!-- GET /api/status -->
+            <div class="endpoint" id="get-status">
+                <div>
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/api/status</span>
+                </div>
+                <p style="margin-top: 0.5rem;">Get overall system status and statistics.</p>
+
+                <h4>Example</h4>
+                <pre><code>curl https://testing.nlweb.ai/api/status \
+  -H "X-API-Key: YOUR_API_KEY"</code></pre>
+
+                <h4>Response</h4>
+                <pre><code>{
+  "master_started_at": "2024-01-20T08:00:00",
+  "master_uptime_seconds": 43200,
+  "sites": [
+    {
+      "site_url": "https://example.com",
+      "is_active": true,
+      "last_processed": "2024-01-20T10:30:00",
+      "total_files": 150,
+      "manual_files": 0,
+      "total_ids": 3750
+    }
+  ]
+}</code></pre>
+            </div>
+
+            <!-- GET /api/queue/status -->
+            <div class="endpoint" id="get-queue-status">
+                <div>
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/api/queue/status</span>
+                </div>
+                <p style="margin-top: 0.5rem;">Get queue processing status (pending, processing, failed jobs).</p>
+
+                <h4>Example</h4>
+                <pre><code>curl https://testing.nlweb.ai/api/queue/status \
+  -H "X-API-Key: YOUR_API_KEY"</code></pre>
+
+                <h4>Response</h4>
+                <pre><code>{
+  "queue_type": "servicebus",
+  "pending_jobs": 42,
+  "processing_jobs": 3,
+  "failed_jobs": 0,
+  "total_jobs": 45,
+  "jobs": [
+    {
+      "id": "job-20240120-103045-123456",
+      "status": "processing",
+      "type": "process_file",
+      "site": "https://example.com",
+      "file_url": "https://example.com/schema/1.json",
+      "queued_at": "2024-01-20T10:30:45",
+      "processing_time": 15
+    }
+  ],
+  "error": null
+}</code></pre>
+            </div>
+
+            <!-- GET /api/workers -->
+            <div class="endpoint" id="get-workers">
+                <div>
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/api/workers</span>
+                </div>
+                <p style="margin-top: 0.5rem;">Get status of all worker pods (Kubernetes only).</p>
+
+                <h4>Example</h4>
+                <pre><code>curl https://testing.nlweb.ai/api/workers \
+  -H "X-API-Key: YOUR_API_KEY"</code></pre>
+
+                <h4>Response</h4>
+                <pre><code>[
+  {
+    "name": "crawler-worker-5d7c8f9-abc12",
+    "ip": "10.244.1.5",
+    "phase": "Running",
+    "status": {
+      "worker_id": "crawler-worker-5d7c8f9-abc12",
+      "started_at": "2024-01-20T08:00:00",
+      "current_job": {
+        "type": "process_file",
+        "file_url": "https://example.com/schema/1.json"
+      },
+      "total_jobs_processed": 1250,
+      "total_jobs_failed": 3,
+      "last_job_at": "2024-01-20T10:30:00",
+      "last_job_status": "success",
+      "status": "processing"
+    },
+    "error": null
+  }
+]</code></pre>
+            </div>
+        </div>
+
+        <!-- User API -->
+        <div class="section" id="user">
+            <h2>👤 User API</h2>
+
+            <!-- GET /api/me -->
+            <div class="endpoint" id="get-me">
+                <div>
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/api/me</span>
+                </div>
+                <p style="margin-top: 0.5rem;">Get your user information including your API key.</p>
+
+                <h4>Example</h4>
+                <pre><code>curl https://testing.nlweb.ai/api/me \
+  -H "X-API-Key: YOUR_API_KEY"</code></pre>
+
+                <h4>Response</h4>
+                <pre><code>{
+  "user_id": "github:12345",
+  "email": "user@example.com",
+  "name": "Your Name",
+  "provider": "github",
+  "api_key": "Abc123XyZ_YourApiKeyHere...",
+  "created_at": "2024-01-15T10:30:00",
+  "last_login": "2024-01-20T14:22:00"
+}</code></pre>
+
+                <div class="note">
+                    <strong>Important:</strong> This is the only endpoint where you can retrieve your API key. Keep it secure!
+                </div>
+            </div>
+        </div>
+
+        <!-- Error Responses -->
+        <div class="section">
+            <h2>❌ Error Responses</h2>
+
+            <h3>Authentication Error (401)</h3>
+            <pre><code>{
+  "error": "Authentication required. Provide X-API-Key header or login via OAuth."
+}</code></pre>
+
+            <h3>Not Found (404)</h3>
+            <pre><code>{
+  "error": "User not found"
+}</code></pre>
+
+            <h3>Bad Request (400)</h3>
+            <pre><code>{
+  "error": "site_url is required"
+}</code></pre>
+
+            <h3>Server Error (500)</h3>
+            <pre><code>{
+  "error": "Internal server error message"
+}</code></pre>
+        </div>
+
+        <!-- Rate Limits -->
+        <div class="section">
+            <h2>⚡ Rate Limits</h2>
+            <p>Currently there are no rate limits, but we recommend:</p>
+            <ul style="margin-left: 2rem; margin-top: 0.5rem;">
+                <li>Maximum 100 requests per minute per API key</li>
+                <li>Batch operations when possible</li>
+                <li>Use webhooks/polling instead of constant status checks</li>
+            </ul>
+        </div>
+
+        <!-- Schema Map Format -->
+        <div class="section">
+            <h2>📋 Schema Map XML Format</h2>
+            <p>Schema maps should follow this XML format:</p>
+            <pre><code>&lt;?xml version="1.0" encoding="utf-8"?&gt;
+&lt;urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"&gt;
+  &lt;url contentType="structuredData/schema.org"&gt;
+    &lt;loc&gt;https://example.com/schema/products/1.json&lt;/loc&gt;
+  &lt;/url&gt;
+  &lt;url contentType="structuredData/schema.org"&gt;
+    &lt;loc&gt;https://example.com/schema/products/2.json&lt;/loc&gt;
+  &lt;/url&gt;
+&lt;/urlset&gt;</code></pre>
+
+            <p style="margin-top: 1rem;"><strong>robots.txt Discovery:</strong></p>
+            <p>Add to your <code>robots.txt</code>:</p>
+            <pre><code>schemaMap: https://example.com/schema_map.xml</code></pre>
+        </div>
+    </div>
+
+    <script>
+        // Check if user is logged in and show API key
+        async function loadUserInfo() {
+            try {
+                const response = await fetch('/api/me');
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('apiKeySection').style.display = 'block';
+                    document.getElementById('userName').textContent = data.name || data.email;
+                    document.getElementById('apiKeyDisplay').textContent = data.api_key;
+                }
+            } catch (e) {
+                // User not logged in, hide the API key section
+            }
+        }
+
+        function copyApiKey() {
+            const apiKey = document.getElementById('apiKeyDisplay').textContent;
+            navigator.clipboard.writeText(apiKey).then(() => {
+                const btn = event.target;
+                btn.textContent = '✓ Copied!';
+                setTimeout(() => {
+                    btn.textContent = 'Copy';
+                }, 2000);
+            });
+        }
+
+        // Load user info on page load and update login/logout link
+        loadUserInfo();
+
+        // Update login/logout link based on authentication
+        async function updateAuthLink() {
+            try {
+                const response = await fetch('/api/me');
+                const link = document.getElementById('loginLogoutLink');
+                if (response.ok) {
+                    const user = await response.json();
+                    link.href = '/logout';
+                    link.textContent = `Logout (${user.name || user.email.split('@')[0]})`;
+                }
+            } catch (e) {
+                // User not logged in, keep as login link
+            }
+        }
+        updateAuthLink();
+    </script>
+</body>
+</html>

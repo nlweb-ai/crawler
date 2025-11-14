@@ -1,0 +1,30 @@
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: azure-queue-auth
+  namespace: crawler
+spec:
+  podIdentity:
+    provider: azure-workload
+    identityId: "21c464ab-7c6b-4d7c-894b-4134ebf95cd0"
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: crawler-worker-scaler
+  namespace: crawler
+spec:
+  scaleTargetRef:
+    name: crawler-worker
+  minReplicaCount: 2   # Minimum number of workers
+  maxReplicaCount: 10  # Maximum number of workers
+  pollingInterval: 30  # Check queue depth every 30 seconds
+  cooldownPeriod: 300  # Wait 5 minutes before scaling down
+  triggers:
+  - type: azure-queue
+    authenticationRef:
+      name: azure-queue-auth
+    metadata:
+      queueName: crawler-jobs
+      queueLength: "5"  # Scale up when there are more than 5 messages per pod
+      accountName: yoastcrawlerstorage

@@ -258,6 +258,60 @@ def add_site():
         print(f"[API] Error in add_site: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/sites/<path:site_url>', methods=['GET'])
+@auth.require_auth
+def get_site_details(site_url):
+    """Get detailed information about a specific site including files and vector DB count"""
+    user_id = auth.get_current_user()
+
+    # Normalize site URL
+    site_url = db.normalize_site_url(site_url)
+
+    conn = db.get_connection()
+    try:
+        cursor = conn.cursor(as_dict=True)
+
+        # Get all files for this site with their item counts
+        cursor.execute("""
+            SELECT
+                f.url,
+                f.last_read,
+                f.status,
+                COUNT(i.id) as item_count
+            FROM files f
+            LEFT JOIN ids i ON f.url = i.file_url AND f.user_id = i.user_id
+            WHERE f.site_url = %s AND f.user_id = %s
+            GROUP BY f.url, f.last_read, f.status
+            ORDER BY f.url
+        """, (site_url, user_id))
+
+        files = cursor.fetchall()
+
+        # Get total vector DB count for this site
+        try:
+            from azure.search.documents import SearchClient
+            from azure.core.credentials import AzureKeyCredential
+
+            search_client = SearchClient(
+                endpoint=os.getenv('AZURE_SEARCH_ENDPOINT'),
+                index_name=os.getenv('AZURE_SEARCH_INDEX_NAME', 'crawler-vectors'),
+                credential=AzureKeyCredential(os.getenv('AZURE_SEARCH_KEY'))
+            )
+
+            results = search_client.search('*', filter=f"site eq '{site_url}'", top=0, include_total_count=True)
+            vector_db_count = results.get_count()
+        except Exception as e:
+            print(f"[API] Error getting vector DB count: {e}")
+            vector_db_count = 0
+
+        return jsonify({
+            'site_url': site_url,
+            'files': files,
+            'vector_db_count': vector_db_count
+        })
+    finally:
+        conn.close()
+
 @app.route('/api/sites/<path:site_url>', methods=['DELETE'])
 @auth.require_auth
 def delete_site(site_url):
@@ -595,7 +649,7 @@ def get_queue_status():
     status['total_jobs'] = status['pending_jobs'] + status['processing_jobs'] + status['failed_jobs']
 
     # Sort jobs by status (processing first, then pending)
-    status['jobs'].sort(key=lambda x: (x['status'] != 'processing', x.get('queued_at', '')), reverse=True)
+    status['jobs'].sort(key=lambda x: (x['status'] != 'processing', x.get('queued_at') or ''), reverse=True)
 
     return jsonify(status)
 

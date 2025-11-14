@@ -144,15 +144,9 @@ class VectorDB:
         if isinstance(obj_type, list):
             obj_type = ', '.join(obj_type)
 
-        # Create searchable content from JSON object
-        content_parts = []
-        for key, value in json_obj.items():
-            if isinstance(value, str):
-                content_parts.append(f"{key}: {value}")
-            elif isinstance(value, (list, dict)):
-                content_parts.append(f"{key}: {json.dumps(value)[:500]}")
-
-        content = " ".join(content_parts)[:10000]  # Limit content size
+        # Store the original JSON object as a JSON string
+        # This ensures the content field contains valid JSON
+        content = json.dumps(json_obj)
 
         # Generate hash of URL for Azure Search key field
         # Using SHA-256 and taking first 32 hex chars (128 bits) for reasonable key length
@@ -198,25 +192,67 @@ class VectorDB:
     async def batch_add(self, items: List[Tuple[str, str, dict]]):
         """Batch add items to the vector database"""
         try:
-            # Generate embeddings for all items
-            texts = [json.dumps(obj) for _, _, obj in items]
-            embeddings = await self.embedding_wrapper.batch_get_embeddings(texts)
+            print(f"[Vector DB] batch_add called with {len(items)} items")
+            if len(items) > 0:
+                print(f"[Vector DB] Sample sites: {[site for _, site, _ in items[:3]]}")
+                print(f"[Vector DB] Sample IDs: {[id for id, _, _ in items[:3]]}")
+
+            # Process in batches to avoid token limits
+            # Azure OpenAI embedding API has limits on:
+            # - Max 2048 items per request
+            # - Max tokens per request (varies by model, ~8191 for text-embedding-3-small)
+            # We'll use a conservative batch size of 50 items
+            embedding_batch_size = 50
+
+            print(f"[Vector DB] Starting embedding generation for {len(items)} items in batches of {embedding_batch_size}")
+            all_embeddings = []
+            for i in range(0, len(items), embedding_batch_size):
+                batch_items = items[i:i + embedding_batch_size]
+                texts = [json.dumps(obj) for _, _, obj in batch_items]
+                print(f"[Vector DB] Batch {i//embedding_batch_size + 1}: Generating embeddings for {len(batch_items)} items...")
+                batch_embeddings = await self.embedding_wrapper.batch_get_embeddings(texts)
+                all_embeddings.extend(batch_embeddings)
+                print(f"[Vector DB] Batch {i//embedding_batch_size + 1}: Successfully generated {len(batch_embeddings)} embeddings")
+                print(f"[Vector DB] Generated embeddings for batch {i//embedding_batch_size + 1}/{(len(items) + embedding_batch_size - 1)//embedding_batch_size} ({len(batch_items)} items)")
+
+                # Add small delay between batches to avoid rate limits
+                if i + embedding_batch_size < len(items):
+                    import asyncio
+                    await asyncio.sleep(1)  # 1 second delay between batches
+
+            print(f"[Vector DB] Total embeddings generated: {len(all_embeddings)}")
 
             if self.search_client:
                 # Prepare documents
+                print(f"[Vector DB] Preparing {len(items)} documents for upload...")
                 documents = []
-                for (id, site, json_obj), embedding in zip(items, embeddings):
+                for (id, site, json_obj), embedding in zip(items, all_embeddings):
                     document = self._prepare_document(id, site, json_obj, embedding)
                     documents.append(document)
 
-                # Upload in batches of 100
-                batch_size = 100
-                for i in range(0, len(documents), batch_size):
-                    batch = documents[i:i + batch_size]
-                    self.search_client.upload_documents(documents=batch)
+                print(f"[Vector DB] Prepared {len(documents)} documents")
+                if len(documents) > 0:
+                    print(f"[Vector DB] Sample document keys: {list(documents[0].keys())}")
+                    print(f"[Vector DB] Sample document site: {documents[0].get('site')}")
+
+                # Upload to search index in batches of 100
+                upload_batch_size = 100
+                print(f"[Vector DB] Starting upload to search index in batches of {upload_batch_size}...")
+                for i in range(0, len(documents), upload_batch_size):
+                    batch = documents[i:i + upload_batch_size]
+                    print(f"[Vector DB] Uploading batch {i//upload_batch_size + 1}/{(len(documents) + upload_batch_size - 1)//upload_batch_size} ({len(batch)} documents)...")
+                    result = self.search_client.upload_documents(documents=batch)
+                    print(f"[Vector DB] Upload result: {result}")
+                    print(f"[Vector DB] Uploaded batch {i//upload_batch_size + 1}/{(len(documents) + upload_batch_size - 1)//upload_batch_size} ({len(batch)} documents)")
+
+                print(f"[Vector DB] Successfully completed batch_add for {len(items)} items")
+            else:
+                print(f"[Vector DB] WARNING: search_client is None, cannot upload documents")
 
         except Exception as e:
-            print(f"Error in batch add to vector DB: {e}")
+            print(f"[Vector DB] ERROR in batch add to vector DB: {e}")
+            import traceback
+            traceback.print_exc()
 
     async def batch_delete(self, ids: List[str]):
         """Batch delete items from the vector database"""

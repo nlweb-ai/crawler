@@ -27,6 +27,123 @@
             margin-bottom: 2rem;
         }
 
+        header .container {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        header .header-left {
+            flex: 1;
+        }
+
+        header .header-right {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .user-menu {
+            position: relative;
+        }
+
+        .user-button {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+            transition: background 0.2s;
+        }
+
+        .user-button:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .user-icon {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: #3498db;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+
+        .dropdown-menu {
+            display: none;
+            position: absolute;
+            top: 100%;
+            right: 0;
+            margin-top: 0.5rem;
+            background: white;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            min-width: 250px;
+            z-index: 1000;
+        }
+
+        .dropdown-menu.show {
+            display: block;
+        }
+
+        .dropdown-item {
+            padding: 0.75rem 1rem;
+            color: #333;
+            text-decoration: none;
+            display: block;
+            transition: background 0.2s;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .dropdown-item:last-child {
+            border-bottom: none;
+        }
+
+        .dropdown-item:hover {
+            background: #f8f9fa;
+        }
+
+        .dropdown-label {
+            font-size: 0.75rem;
+            color: #999;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+
+        .api-key-display {
+            font-family: monospace;
+            font-size: 0.8rem;
+            color: #e74c3c;
+            background: #f8f9fa;
+            padding: 0.5rem;
+            border-radius: 3px;
+            margin-top: 0.25rem;
+            word-break: break-all;
+        }
+
+        .copy-key-btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 0.4rem 0.8rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            margin-top: 0.5rem;
+            width: 100%;
+        }
+
+        .copy-key-btn:hover {
+            background: #2980b9;
+        }
+
         h1 { margin-bottom: 0.5rem; }
         h2 {
             color: #2c3e50;
@@ -234,17 +351,45 @@
 <body>
     <header>
         <div class="container">
-            <h1>Schema Crawler Admin</h1>
-            <p>Manage sites and schema files for crawling</p>
-            <p style="margin-top: 0.5rem; font-size: 0.9rem; opacity: 0.9;" id="masterStatus">
-                Master started: <span id="masterStartTime">-</span> | Uptime: <span id="masterUptime">-</span>
-            </p>
-            <p style="margin-top: 0.5rem;">
-                <a href="/files.html" style="color: #3498db; margin-right: 1rem;">View Files Table →</a>
-                <a href="/queue.html" style="color: #3498db; margin-right: 1rem;">View Queue History →</a>
-                <a href="/workers.html" style="color: #3498db; margin-right: 1rem;">View Workers →</a>
-                <a href="/fetch-log.html" style="color: #3498db;">View Fetch Log →</a>
-            </p>
+            <div class="header-left">
+                <h1>Schema Crawler Admin</h1>
+                <p>Manage sites and schema files for crawling</p>
+                <p style="margin-top: 0.5rem; font-size: 0.9rem; opacity: 0.9;" id="masterStatus">
+                    Master started: <span id="masterStartTime">-</span> | Uptime: <span id="masterUptime">-</span>
+                </p>
+                <p style="margin-top: 0.5rem;">
+                    <a href="/files.html" style="color: #3498db; margin-right: 1rem;">View Files Table →</a>
+                    <a href="/queue.html" style="color: #3498db; margin-right: 1rem;">View Queue History →</a>
+                    <a href="/workers.html" style="color: #3498db; margin-right: 1rem;">View Workers →</a>
+                    <a href="/api-docs" style="color: #3498db; margin-right: 1rem;">API Docs →</a>
+                </p>
+            </div>
+            <div class="header-right">
+                <div class="user-menu">
+                    <button class="user-button" onclick="toggleUserMenu()">
+                        <div class="user-icon" id="userIcon">?</div>
+                        <span id="userName">Loading...</span>
+                        <span>▼</span>
+                    </button>
+                    <div class="dropdown-menu" id="userDropdown">
+                        <a href="/profile" class="dropdown-item" style="font-weight: 600; color: #3498db;">
+                            👤 My Profile
+                        </a>
+                        <div class="dropdown-item">
+                            <div class="dropdown-label">Email</div>
+                            <div id="userEmail">-</div>
+                        </div>
+                        <div class="dropdown-item">
+                            <div class="dropdown-label">API Key</div>
+                            <div class="api-key-display" id="userApiKey">Loading...</div>
+                            <button class="copy-key-btn" onclick="copyApiKey()">Copy API Key</button>
+                        </div>
+                        <a href="/logout" class="dropdown-item" style="color: #e74c3c; font-weight: 600;">
+                            🚪 Logout
+                        </a>
+                    </div>
+                </div>
+            </div>
         </div>
     </header>
 
@@ -347,5 +492,64 @@
     </div>
 
     <script src="app.js"></script>
+    <script>
+        // User menu functionality
+        let userMenuOpen = false;
+
+        async function loadUserInfo() {
+            try {
+                const response = await fetch('/api/me');
+                if (response.ok) {
+                    const user = await response.json();
+                    // Update user display
+                    document.getElementById('userName').textContent = user.name || user.email.split('@')[0];
+                    document.getElementById('userEmail').textContent = user.email;
+                    document.getElementById('userApiKey').textContent = user.api_key;
+
+                    // Set user icon (first letter of name)
+                    const initial = (user.name || user.email)[0].toUpperCase();
+                    document.getElementById('userIcon').textContent = initial;
+                } else {
+                    // Not logged in, redirect to login
+                    window.location.href = '/login';
+                }
+            } catch (error) {
+                console.error('Error loading user info:', error);
+            }
+        }
+
+        function toggleUserMenu() {
+            userMenuOpen = !userMenuOpen;
+            const dropdown = document.getElementById('userDropdown');
+            if (userMenuOpen) {
+                dropdown.classList.add('show');
+            } else {
+                dropdown.classList.remove('show');
+            }
+        }
+
+        function copyApiKey() {
+            const apiKey = document.getElementById('userApiKey').textContent;
+            navigator.clipboard.writeText(apiKey).then(() => {
+                const btn = event.target;
+                const originalText = btn.textContent;
+                btn.textContent = '✓ Copied!';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                }, 2000);
+            });
+        }
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function(event) {
+            const userMenu = document.querySelector('.user-menu');
+            if (!userMenu.contains(event.target) && userMenuOpen) {
+                toggleUserMenu();
+            }
+        });
+
+        // Load user info on page load
+        loadUserInfo();
+    </script>
 </body>
 </html>
