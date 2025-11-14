@@ -795,6 +795,50 @@ def get_file_ids(file_url):
     finally:
         conn.close()
 
+@app.route('/api/files/<path:file_url>/details', methods=['GET'])
+@auth.require_auth
+def get_file_details(file_url):
+    """Get detailed information about a file including errors"""
+    user_id = auth.get_current_user()
+    conn = db.get_connection()
+    try:
+        cursor = conn.cursor(as_dict=True)
+
+        # Get file info
+        cursor.execute("""
+            SELECT file_url, site_url, schema_map, last_read_time, number_of_items, is_active
+            FROM files
+            WHERE file_url = %s AND user_id = %s
+        """, (file_url, user_id))
+        file_info = cursor.fetchone()
+
+        if not file_info:
+            return jsonify({'error': 'File not found'}), 404
+
+        # Get error history
+        errors = db.get_file_errors(conn, file_url, user_id, limit=50)
+
+        # Get ID count
+        cursor.execute("""
+            SELECT COUNT(*) as id_count
+            FROM ids
+            WHERE file_url = %s AND user_id = %s
+        """, (file_url, user_id))
+        id_count = cursor.fetchone()['id_count']
+
+        return jsonify({
+            'file_url': file_url,
+            'site_url': file_info['site_url'],
+            'schema_map': file_info['schema_map'],
+            'last_read_time': file_info['last_read_time'].isoformat() if file_info['last_read_time'] else None,
+            'number_of_items': file_info['number_of_items'] or id_count,
+            'id_count': id_count,
+            'is_active': file_info['is_active'],
+            'errors': errors
+        })
+    finally:
+        conn.close()
+
 @app.route('/api/queue/history', methods=['GET'])
 def get_queue_history():
     """Get queue history from log file"""

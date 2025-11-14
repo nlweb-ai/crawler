@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Details - Schema.org Crawler</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .back-link {
+            color: white;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+
+        .back-link:hover {
+            text-decoration: underline;
+        }
+
+        .card {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+            word-break: break-all;
+        }
+
+        h2 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .info-item {
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .info-label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+
+        .info-value {
+            font-size: 18px;
+            color: #333;
+            font-weight: bold;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .status-active {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-inactive {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .errors-section {
+            margin-top: 30px;
+        }
+
+        .error-item {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+        }
+
+        .error-item.error {
+            background: #f8d7da;
+            border-left-color: #dc3545;
+        }
+
+        .error-item.warning {
+            background: #fff3cd;
+            border-left-color: #ffc107;
+        }
+
+        .error-type {
+            font-weight: 600;
+            color: #721c24;
+            margin-bottom: 5px;
+        }
+
+        .error-message {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .error-details {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: #666;
+            background: white;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .error-time {
+            font-size: 12px;
+            color: #666;
+            margin-top: 10px;
+        }
+
+        .no-errors {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+            background: #d4edda;
+            border-radius: 8px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .url-value {
+            word-break: break-all;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/files.html" class="back-link">← Back to Files</a>
+
+        <div class="card">
+            <h1 id="fileUrl">Loading...</h1>
+
+            <div class="info-grid">
+                <div class="info-item">
+                    <div class="info-label">Site</div>
+                    <div class="info-value" id="siteUrl">-</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Items (IDs)</div>
+                    <div class="info-value" id="idCount">-</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Last Read</div>
+                    <div class="info-value" id="lastRead">Never</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Status</div>
+                    <div class="info-value" id="status">-</div>
+                </div>
+            </div>
+
+            <div class="info-item" style="margin-bottom: 20px;">
+                <div class="info-label">Schema Map</div>
+                <div class="url-value" id="schemaMap">-</div>
+            </div>
+        </div>
+
+        <div class="card errors-section">
+            <h2>Processing Errors</h2>
+            <div id="errorsContent">
+                <div class="loading">Loading errors...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin + '/api';
+        const apiKey = localStorage.getItem('apiKey');
+
+        if (!apiKey) {
+            window.location.href = '/login.html';
+        }
+
+        // Get file URL from query parameter
+        const urlParams = new URLSearchParams(window.location.search);
+        const fileUrl = urlParams.get('file');
+
+        if (!fileUrl) {
+            document.getElementById('fileUrl').textContent = 'No file specified';
+        } else {
+            loadFileDetails();
+        }
+
+        async function loadFileDetails() {
+            try {
+                const response = await fetch(`${API_BASE}/files/${encodeURIComponent(fileUrl)}/details`, {
+                    headers: {
+                        'X-API-Key': apiKey
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Failed to load file details: ${response.status}`);
+                }
+
+                const data = await response.json();
+                displayFileDetails(data);
+            } catch (error) {
+                console.error('Error loading file details:', error);
+                document.getElementById('fileUrl').textContent = 'Error loading file';
+                document.getElementById('errorsContent').innerHTML = `<div class="error-item error"><div class="error-message">${error.message}</div></div>`;
+            }
+        }
+
+        function displayFileDetails(data) {
+            document.getElementById('fileUrl').textContent = data.file_url;
+            document.getElementById('siteUrl').textContent = data.site_url;
+            document.getElementById('idCount').textContent = data.id_count.toLocaleString();
+            document.getElementById('lastRead').textContent = data.last_read_time ? new Date(data.last_read_time).toLocaleString() : 'Never';
+            document.getElementById('schemaMap').textContent = data.schema_map || 'N/A';
+
+            const statusEl = document.getElementById('status');
+            if (data.is_active) {
+                statusEl.innerHTML = '<span class="status-badge status-active">Active</span>';
+            } else {
+                statusEl.innerHTML = '<span class="status-badge status-inactive">Inactive</span>';
+            }
+
+            // Display errors
+            const errorsContent = document.getElementById('errorsContent');
+            if (data.errors && data.errors.length > 0) {
+                errorsContent.innerHTML = data.errors.map(error => {
+                    const errorClass = error.error_type.includes('failed') ? 'error' : 'warning';
+                    return `
+                        <div class="error-item ${errorClass}">
+                            <div class="error-type">${escapeHtml(error.error_type)}</div>
+                            <div class="error-message">${escapeHtml(error.error_message)}</div>
+                            ${error.error_details ? `<div class="error-details">${escapeHtml(error.error_details)}</div>` : ''}
+                            <div class="error-time">${new Date(error.occurred_at).toLocaleString()}</div>
+                        </div>
+                    `;
+                }).join('');
+            } else {
+                errorsContent.innerHTML = '<div class="no-errors">✓ No errors - file processed successfully</div>';
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>

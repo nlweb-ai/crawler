@@ -220,7 +220,7 @@
                     return `
                         <tr>
                             <td class="url">${file.site_url}</td>
-                            <td class="url">${file.file_url}</td>
+                            <td class="url"><a href="/file.html?file=${encodeURIComponent(file.file_url)}" style="color: #3498db; text-decoration: none;">${file.file_url}</a></td>
                             <td class="url">${file.schema_map || '-'}</td>
                             <td class="${file.is_active ? 'status-active' : 'status-inactive'}">
                                 ${file.is_active ? 'Yes' : 'No'}

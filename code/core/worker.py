@@ -183,9 +183,23 @@ def process_job(conn, job):
 
             # Use existing extract_schema_data_from_url which returns (ids, objects)
             print(f"[WORKER] Calling extract_schema_data_from_url for {job['file_url']}")
-            ids, objects = extract_schema_data_from_url(job['file_url'])
+            try:
+                ids, objects = extract_schema_data_from_url(job['file_url'])
+            except Exception as e:
+                error_msg = f"Failed to extract schema data: {str(e)}"
+                print(f"[WORKER ERROR] {error_msg}")
+                db.log_processing_error(conn, job['file_url'], user_id, 'extraction_failed', error_msg, str(e.__class__.__name__))
+                return False
 
             print(f"[WORKER] Extracted {len(ids)} IDs, {len(objects)} objects from {job['file_url']}")
+
+            # Log if no IDs extracted
+            if len(ids) == 0:
+                error_msg = "No schema.org objects with @id found in file"
+                print(f"[WORKER WARNING] {error_msg}")
+                db.log_processing_error(conn, job['file_url'], user_id, 'no_ids_found', error_msg, f"Objects: {len(objects)}")
+                # Continue processing - this might not be an error for some files
+
             if len(ids) > 0:
                 print(f"[WORKER] Sample IDs: {list(ids)[:3]}")
             if len(objects) > 0:
@@ -232,11 +246,19 @@ def process_job(conn, job):
                 print(f"[WORKER] Sample items to add: {[(id, site) for id, site, _ in items_to_add[:3]]}")
                 from vector_db import vector_db_batch_add
                 print(f"[WORKER] Calling vector_db_batch_add...")
-                vector_db_batch_add(items_to_add)
-                print(f"[WORKER] Successfully completed vector_db_batch_add for {len(items_to_add)} items")
-                # Log the additions
-                for id, site, obj in items_to_add:
-                    log_vector_db_addition(id, site, obj)
+                try:
+                    vector_db_batch_add(items_to_add)
+                    print(f"[WORKER] Successfully completed vector_db_batch_add for {len(items_to_add)} items")
+                    # Log the additions
+                    for id, site, obj in items_to_add:
+                        log_vector_db_addition(id, site, obj)
+                except Exception as e:
+                    error_msg = f"Failed to add items to vector DB: {str(e)}"
+                    print(f"[WORKER ERROR] {error_msg}")
+                    import traceback
+                    error_details = traceback.format_exc()
+                    db.log_processing_error(conn, job['file_url'], user_id, 'vector_db_add_failed', error_msg, error_details)
+                    # Don't return False - we still updated the IDs table, so mark as processed
             else:
                 print(f"[WORKER] No new items to add to vector DB (all IDs already exist)")
 
@@ -257,6 +279,9 @@ def process_job(conn, job):
             # Update the site's last_processed timestamp (Note: may need user_id in future)
             print(f"[WORKER] Updating site last_processed timestamp for {job['site']}")
             update_site_last_processed(job['site'])
+
+            # Clear any previous errors for this file since it processed successfully
+            db.clear_file_errors(conn, job['file_url'], user_id)
 
             print(f"[WORKER] ========== Completed process_file for {job['file_url']} ==========")
             return True

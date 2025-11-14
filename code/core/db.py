@@ -123,6 +123,48 @@ def create_tables(conn):
     )
     """)
 
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS processing_errors (
+        id INT IDENTITY(1,1) PRIMARY KEY,
+        file_url VARCHAR(500) NOT NULL,
+        user_id VARCHAR(255) NOT NULL,
+        error_type VARCHAR(100) NOT NULL,
+        error_message VARCHAR(MAX),
+        error_details VARCHAR(MAX),
+        occurred_at DATETIME DEFAULT GETUTCDATE(),
+        FOREIGN KEY (user_id) REFERENCES users(user_id)
+    )
+    """)
+
+    conn.commit()
+
+def log_processing_error(conn, file_url, user_id, error_type, error_message, error_details=None):
+    """Log a processing error for a file"""
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO processing_errors (file_url, user_id, error_type, error_message, error_details)
+        VALUES (%s, %s, %s, %s, %s)
+    """, (file_url, user_id, error_type, error_message, error_details))
+    conn.commit()
+
+def get_file_errors(conn, file_url, user_id, limit=50):
+    """Get recent errors for a file"""
+    cursor = conn.cursor(as_dict=True)
+    cursor.execute("""
+        SELECT TOP (%s) error_type, error_message, error_details, occurred_at
+        FROM processing_errors
+        WHERE file_url = %s AND user_id = %s
+        ORDER BY occurred_at DESC
+    """, (limit, file_url, user_id))
+    return cursor.fetchall()
+
+def clear_file_errors(conn, file_url, user_id):
+    """Clear all errors for a file (called when file successfully processes)"""
+    cursor = conn.cursor()
+    cursor.execute("""
+        DELETE FROM processing_errors
+        WHERE file_url = %s AND user_id = %s
+    """, (file_url, user_id))
     conn.commit()
 
 def get_site_files(conn, site_url, user_id):
