@@ -388,43 +388,72 @@
         const urlParams = new URLSearchParams(window.location.search);
         const siteUrl = urlParams.get('site');
 
-        // Initialize the search widget after DOM is ready
-        window.addEventListener('DOMContentLoaded', () => {
-            if (siteUrl && siteUrl !== 'null') {
-                try {
-                    // Ensure the container has minimum height for visibility
-                    const container = document.getElementById('nlweb-search-container');
-                    if (container) {
-                        container.style.minHeight = '400px';
-                        container.style.position = 'relative';
-                    }
+        // Wait for both DOM and module to be ready
+        if (siteUrl && siteUrl !== 'null') {
+            // Ensure container exists before initializing
+            const checkAndInitialize = () => {
+                const container = document.getElementById('nlweb-search-container');
+                if (!container) {
+                    console.error('Container not found');
+                    return;
+                }
 
+                try {
+                    // Set container styles
+                    container.style.minHeight = '400px';
+                    container.style.position = 'relative';
+
+                    console.log('Initializing NLWeb widget for site:', siteUrl);
+
+                    // Create the widget instance
                     const nlwebChat = new NLWebDropdownChat({
                         containerId: 'nlweb-search-container',
-                        site: siteUrl,  // Set the site parameter to the current site
+                        site: siteUrl,
                         placeholder: `Search within ${siteUrl}...`,
                         endpoint: 'https://nlw.azurewebsites.net'
                     });
-                    console.log('NLWeb search initialized for site:', siteUrl);
 
-                    // Debug: Check if the widget created its DOM elements
+                    console.log('NLWeb widget instance created:', nlwebChat);
+
+                    // Check DOM creation after a delay
                     setTimeout(() => {
+                        console.log('Container innerHTML:', container.innerHTML);
+                        console.log('Container children:', container.children);
+
                         const searchWrapper = container.querySelector('.nlweb-search-wrapper');
+                        const searchInput = container.querySelector('input');
                         const resultsDropdown = container.querySelector('.nlweb-results-dropdown');
-                        console.log('Widget DOM created:', {
-                            container: container,
-                            searchWrapper: searchWrapper,
-                            resultsDropdown: resultsDropdown,
-                            childrenCount: container.children.length
+
+                        console.log('Widget DOM check:', {
+                            hasSearchWrapper: !!searchWrapper,
+                            hasSearchInput: !!searchInput,
+                            hasResultsDropdown: !!resultsDropdown,
+                            childrenCount: container.children.length,
+                            firstChild: container.firstElementChild
                         });
+
+                        // If no children were added, try to manually trigger initialization
+                        if (container.children.length === 0) {
+                            console.error('Widget failed to create DOM elements');
+                            container.innerHTML = '<p style="color: #e74c3c; padding: 1rem;">Widget failed to initialize. Check console for errors.</p>';
+                        }
                     }, 1000);
+
                 } catch (error) {
-                    console.error('Error initializing NLWeb search:', error);
-                    document.getElementById('nlweb-search-container').innerHTML =
-                        '<p style="color: #7f8c8d; padding: 1rem;">Search widget could not be loaded</p>';
+                    console.error('Error initializing NLWeb widget:', error);
+                    console.error('Error stack:', error.stack);
+                    container.innerHTML = '<p style="color: #e74c3c; padding: 1rem;">Error loading widget: ' + error.message + '</p>';
                 }
+            };
+
+            // Try initialization when DOM is ready
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', checkAndInitialize);
+            } else {
+                // DOM is already loaded
+                checkAndInitialize();
             }
-        });
+        }
     </script>
 
     <script>
