@@ -450,49 +450,84 @@
 
                     console.log('NLWeb widget initialized successfully');
 
-                    // Monitor for DOM changes in the messages container
-                    const messagesContainer = container.querySelector('#messages-container');
-                    if (messagesContainer) {
-                        const observer = new MutationObserver((mutations) => {
-                            mutations.forEach((mutation) => {
-                                if (mutation.type === 'childList') {
-                                    console.log('Messages container updated:');
-                                    console.log('Added nodes:', mutation.addedNodes);
-                                    console.log('Current HTML:', messagesContainer.innerHTML);
-                                    console.log('Current children count:', messagesContainer.children.length);
+                    // Monitor ALL DOM changes in the entire container
+                    const observer = new MutationObserver((mutations) => {
+                        mutations.forEach((mutation) => {
+                            if (mutation.type === 'childList') {
+                                mutation.addedNodes.forEach(node => {
+                                    if (node.nodeType === Node.ELEMENT_NODE) {
+                                        console.log('🔵 DOM element added:', {
+                                            tagName: node.tagName,
+                                            className: node.className,
+                                            id: node.id,
+                                            parent: mutation.target.className || mutation.target.id || mutation.target.tagName,
+                                            html: node.innerHTML ? node.innerHTML.substring(0, 200) : ''
+                                        });
 
-                                    // Check if dropdown is visible
-                                    const dropdown = container.querySelector('.nlweb-dropdown-results');
-                                    console.log('Dropdown has "show" class:', dropdown?.classList.contains('show'));
+                                        // Check if this is a message element
+                                        if (node.className && node.className.includes('message')) {
+                                            console.log('📩 MESSAGE ELEMENT FOUND:', node);
+                                        }
+                                    } else if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) {
+                                        console.log('📝 Text added:', node.textContent.substring(0, 100));
+                                    }
+                                });
+
+                                mutation.removedNodes.forEach(node => {
+                                    if (node.nodeType === Node.ELEMENT_NODE) {
+                                        console.log('🔴 DOM element removed:', node.className || node.id || node.tagName);
+                                    }
+                                });
+                            }
+
+                            if (mutation.type === 'attributes') {
+                                if (mutation.target.className && mutation.target.className.includes('dropdown')) {
+                                    console.log('🔄 Dropdown attribute changed:', {
+                                        element: mutation.target.className,
+                                        attribute: mutation.attributeName,
+                                        newValue: mutation.target.getAttribute(mutation.attributeName)
+                                    });
                                 }
-                            });
+                            }
                         });
+                    });
 
-                        observer.observe(messagesContainer, {
-                            childList: true,
-                            subtree: true,
-                            characterData: true
-                        });
+                    observer.observe(container, {
+                        childList: true,
+                        subtree: true,
+                        attributes: true,
+                        characterData: true
+                    });
 
-                        console.log('Monitoring messages container for changes');
-                    }
+                    console.log('Comprehensive DOM monitoring enabled');
 
-                    // Also monitor the dropdown results container
-                    const dropdownResults = container.querySelector('.nlweb-dropdown-results');
-                    if (dropdownResults) {
-                        const dropdownObserver = new MutationObserver((mutations) => {
-                            mutations.forEach((mutation) => {
-                                if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
-                                    console.log('Dropdown class changed:', dropdownResults.className);
-                                    console.log('Dropdown display:', window.getComputedStyle(dropdownResults).display);
-                                    console.log('Dropdown visibility:', window.getComputedStyle(dropdownResults).visibility);
-                                }
-                            });
-                        });
+                    // Check initial structure
+                    console.log('Initial elements check:', {
+                        container: container,
+                        messagesContainer: container.querySelector('#messages-container'),
+                        dropdownResults: container.querySelector('.nlweb-dropdown-results'),
+                        searchInput: container.querySelector('.nlweb-dropdown-search-input'),
+                        allDivs: container.querySelectorAll('div').length
+                    });
 
-                        dropdownObserver.observe(dropdownResults, { attributes: true });
-                        console.log('Monitoring dropdown for visibility changes');
-                    }
+                    // Intercept EventSource for SSE monitoring
+                    const originalEventSource = window.EventSource;
+                    window.EventSource = function(url, options) {
+                        console.log('📡 SSE Connection opened:', url);
+                        const source = new originalEventSource(url, options);
+
+                        const originalAddEventListener = source.addEventListener;
+                        source.addEventListener = function(type, listener, options) {
+                            console.log('📡 SSE listener added for:', type);
+                            const wrappedListener = function(event) {
+                                console.log('📡 SSE event received:', type, event.data ? event.data.substring(0, 100) : 'no data');
+                                return listener.call(this, event);
+                            };
+                            return originalAddEventListener.call(this, type, wrappedListener, options);
+                        };
+
+                        return source;
+                    };
 
                 } catch (error) {
                     console.error('Error initializing NLWeb widget:', error);
