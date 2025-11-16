@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Site Details - Schema Crawler</title>
+    <!-- NLWeb Dropdown Widget CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/nlweb-ai/NLWeb_Core@main/nlweb-ui/nlweb-dropdown-chat.css">
+
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -299,6 +302,12 @@
             </div>
         </div>
 
+        <!-- Site Search Box -->
+        <div class="section">
+            <h2>🔍 Search This Site</h2>
+            <div id="nlweb-search-container"></div>
+        </div>
+
         <!-- Statistics -->
         <div class="section">
             <h2>📊 Site Statistics</h2>
@@ -360,7 +369,6 @@
                     <thead>
                         <tr>
                             <th>File URL</th>
-                            <th>Schema Map</th>
                             <th>Items</th>
                             <th>Last Read</th>
                             <th>Type</th>
@@ -373,10 +381,28 @@
         </div>
     </div>
 
+    <!-- NLWeb Dropdown Widget JS -->
+    <script src="https://cdn.jsdelivr.net/gh/nlweb-ai/NLWeb_Core@main/nlweb-ui/nlweb-dropdown-chat.js"></script>
+
     <script>
+        // Check authentication
+        async function checkAuth() {
+            try {
+                const response = await fetch('/api/me');
+                if (!response.ok) {
+                    window.location.href = '/login';
+                    return false;
+                }
+                return true;
+            } catch (error) {
+                window.location.href = '/login';
+                return false;
+            }
+        }
+
         // Get site URL from query parameter
         const urlParams = new URLSearchParams(window.location.search);
-        const siteUrl = decodeURIComponent(urlParams.get('url'));
+        const siteUrl = urlParams.get('site');
 
         if (!siteUrl || siteUrl === 'null') {
             alert('No site URL provided');
@@ -385,6 +411,25 @@
 
         // Display site URL
         document.getElementById('siteUrl').textContent = siteUrl;
+
+        // Initialize NLWeb Dropdown Search for this specific site
+        let nlwebChat = null;
+        function initializeNLWebSearch() {
+            try {
+                nlwebChat = new NLWebDropdownChat({
+                    containerId: 'nlweb-search-container',
+                    site: siteUrl,  // Set the site parameter to the current site
+                    placeholder: `Search within ${siteUrl}...`,
+                    endpoint: 'https://nlw.azurewebsites.net'  // You may want to configure this endpoint
+                });
+                console.log('NLWeb search initialized for site:', siteUrl);
+            } catch (error) {
+                console.error('Error initializing NLWeb search:', error);
+                // If initialization fails, show a fallback message
+                document.getElementById('nlweb-search-container').innerHTML =
+                    '<p style="color: #7f8c8d; padding: 1rem;">Search widget could not be loaded</p>';
+            }
+        }
 
         let allFiles = [];
 
@@ -505,8 +550,7 @@
             files.forEach(file => {
                 const row = document.createElement('tr');
                 row.innerHTML = `
-                    <td><div class="file-url">${file.file_url}</div></td>
-                    <td><div class="file-url">${file.schema_map || 'N/A'}</div></td>
+                    <td><a href="/file.html?file=${encodeURIComponent(file.file_url)}" style="color: #3498db; text-decoration: none;"><div class="file-url">${file.file_url}</div></a></td>
                     <td>${(file.number_of_items || 0).toLocaleString()}</td>
                     <td>${file.last_read_time ? new Date(file.last_read_time).toLocaleString() : 'Never'}</td>
                     <td>
@@ -523,8 +567,7 @@
         function filterFiles() {
             const filter = document.getElementById('fileFilter').value.toLowerCase();
             const filteredFiles = allFiles.filter(file =>
-                file.file_url.toLowerCase().includes(filter) ||
-                (file.schema_map && file.schema_map.toLowerCase().includes(filter))
+                file.file_url.toLowerCase().includes(filter)
             );
             renderFiles(filteredFiles);
         }
@@ -574,14 +617,21 @@
         }
 
         // Load everything on page load
-        loadSiteDetails();
-        loadFiles();
+        (async () => {
+            if (await checkAuth()) {
+                // Initialize NLWeb search widget
+                initializeNLWebSearch();
 
-        // Refresh every 30 seconds
-        setInterval(() => {
-            loadSiteDetails();
-            loadFiles();
-        }, 30000);
+                loadSiteDetails();
+                loadFiles();
+
+                // Refresh every 30 seconds
+                setInterval(() => {
+                    loadSiteDetails();
+                    loadFiles();
+                }, 30000);
+            }
+        })();
     </script>
 </body>
 </html>
