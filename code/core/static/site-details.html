@@ -263,6 +263,45 @@
             max-width: 400px;
             font-size: 0.9rem;
         }
+
+        /* NLWeb Dropdown Positioning Fixes */
+        #nlweb-search-container {
+            position: relative;
+        }
+
+        .nlweb-dropdown-results {
+            position: absolute !important;
+            top: 100% !important;
+            left: 0 !important;
+            right: 0 !important;
+            margin-top: 2px !important;
+            background: white;
+            border: 1px solid #e1e8ed;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            z-index: 1000;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .nlweb-dropdown-results.show {
+            display: block !important;
+        }
+
+        .nlweb-dropdown-search-wrapper {
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Ensure messages are visible */
+        .nlweb-dropdown-messages-container {
+            padding: 1rem;
+            min-height: 100px;
+        }
+
+        .nlweb-message {
+            margin-bottom: 1rem;
+        }
     </style>
 </head>
 <body>
@@ -410,6 +449,50 @@
                     });
 
                     console.log('NLWeb widget initialized successfully');
+
+                    // Monitor for DOM changes in the messages container
+                    const messagesContainer = container.querySelector('#messages-container');
+                    if (messagesContainer) {
+                        const observer = new MutationObserver((mutations) => {
+                            mutations.forEach((mutation) => {
+                                if (mutation.type === 'childList') {
+                                    console.log('Messages container updated:');
+                                    console.log('Added nodes:', mutation.addedNodes);
+                                    console.log('Current HTML:', messagesContainer.innerHTML);
+                                    console.log('Current children count:', messagesContainer.children.length);
+
+                                    // Check if dropdown is visible
+                                    const dropdown = container.querySelector('.nlweb-dropdown-results');
+                                    console.log('Dropdown has "show" class:', dropdown?.classList.contains('show'));
+                                }
+                            });
+                        });
+
+                        observer.observe(messagesContainer, {
+                            childList: true,
+                            subtree: true,
+                            characterData: true
+                        });
+
+                        console.log('Monitoring messages container for changes');
+                    }
+
+                    // Also monitor the dropdown results container
+                    const dropdownResults = container.querySelector('.nlweb-dropdown-results');
+                    if (dropdownResults) {
+                        const dropdownObserver = new MutationObserver((mutations) => {
+                            mutations.forEach((mutation) => {
+                                if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+                                    console.log('Dropdown class changed:', dropdownResults.className);
+                                    console.log('Dropdown display:', window.getComputedStyle(dropdownResults).display);
+                                    console.log('Dropdown visibility:', window.getComputedStyle(dropdownResults).visibility);
+                                }
+                            });
+                        });
+
+                        dropdownObserver.observe(dropdownResults, { attributes: true });
+                        console.log('Monitoring dropdown for visibility changes');
+                    }
 
                 } catch (error) {
                     console.error('Error initializing NLWeb widget:', error);
