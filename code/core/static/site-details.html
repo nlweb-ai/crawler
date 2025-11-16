@@ -392,6 +392,13 @@
         window.addEventListener('DOMContentLoaded', () => {
             if (siteUrl && siteUrl !== 'null') {
                 try {
+                    // Ensure the container has minimum height for visibility
+                    const container = document.getElementById('nlweb-search-container');
+                    if (container) {
+                        container.style.minHeight = '400px';
+                        container.style.position = 'relative';
+                    }
+
                     const nlwebChat = new NLWebDropdownChat({
                         containerId: 'nlweb-search-container',
                         site: siteUrl,  // Set the site parameter to the current site
@@ -399,6 +406,18 @@
                         endpoint: 'https://nlw.azurewebsites.net'
                     });
                     console.log('NLWeb search initialized for site:', siteUrl);
+
+                    // Debug: Check if the widget created its DOM elements
+                    setTimeout(() => {
+                        const searchWrapper = container.querySelector('.nlweb-search-wrapper');
+                        const resultsDropdown = container.querySelector('.nlweb-results-dropdown');
+                        console.log('Widget DOM created:', {
+                            container: container,
+                            searchWrapper: searchWrapper,
+                            resultsDropdown: resultsDropdown,
+                            childrenCount: container.children.length
+                        });
+                    }, 1000);
                 } catch (error) {
                     console.error('Error initializing NLWeb search:', error);
                     document.getElementById('nlweb-search-container').innerHTML =
