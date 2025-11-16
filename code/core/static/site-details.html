@@ -4,9 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Site Details - Schema Crawler</title>
-    <!-- NLWeb Dropdown Widget CSS -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/nlweb-ai/NLWeb_Core@main/nlweb-ui/nlweb-dropdown-chat.css">
-
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -381,8 +378,33 @@
         </div>
     </div>
 
-    <!-- NLWeb Dropdown Widget JS -->
-    <script src="https://cdn.jsdelivr.net/gh/nlweb-ai/NLWeb_Core@main/nlweb-ui/nlweb-dropdown-chat.js"></script>
+    <script type="module">
+        // Import the NLWeb Dropdown Chat module
+        import { NLWebDropdownChat } from 'https://cdn.jsdelivr.net/gh/nlweb-ai/NLWeb_Core@main/nlweb-ui/nlweb-dropdown-chat.js';
+
+        // Get site URL from query parameter
+        const urlParams = new URLSearchParams(window.location.search);
+        const siteUrl = urlParams.get('site');
+
+        // Initialize the search widget after DOM is ready
+        window.addEventListener('DOMContentLoaded', () => {
+            if (siteUrl && siteUrl !== 'null') {
+                try {
+                    const nlwebChat = new NLWebDropdownChat({
+                        containerId: 'nlweb-search-container',
+                        site: siteUrl,  // Set the site parameter to the current site
+                        placeholder: `Search within ${siteUrl}...`,
+                        endpoint: 'https://nlw.azurewebsites.net'
+                    });
+                    console.log('NLWeb search initialized for site:', siteUrl);
+                } catch (error) {
+                    console.error('Error initializing NLWeb search:', error);
+                    document.getElementById('nlweb-search-container').innerHTML =
+                        '<p style="color: #7f8c8d; padding: 1rem;">Search widget could not be loaded</p>';
+                }
+            }
+        });
+    </script>
 
     <script>
         // Check authentication
@@ -411,25 +433,6 @@
 
         // Display site URL
         document.getElementById('siteUrl').textContent = siteUrl;
-
-        // Initialize NLWeb Dropdown Search for this specific site
-        let nlwebChat = null;
-        function initializeNLWebSearch() {
-            try {
-                nlwebChat = new NLWebDropdownChat({
-                    containerId: 'nlweb-search-container',
-                    site: siteUrl,  // Set the site parameter to the current site
-                    placeholder: `Search within ${siteUrl}...`,
-                    endpoint: 'https://nlw.azurewebsites.net'  // You may want to configure this endpoint
-                });
-                console.log('NLWeb search initialized for site:', siteUrl);
-            } catch (error) {
-                console.error('Error initializing NLWeb search:', error);
-                // If initialization fails, show a fallback message
-                document.getElementById('nlweb-search-container').innerHTML =
-                    '<p style="color: #7f8c8d; padding: 1rem;">Search widget could not be loaded</p>';
-            }
-        }
 
         let allFiles = [];
 
@@ -619,9 +622,6 @@
         // Load everything on page load
         (async () => {
             if (await checkAuth()) {
-                // Initialize NLWeb search widget
-                initializeNLWebSearch();
-
                 loadSiteDetails();
                 loadFiles();
 
