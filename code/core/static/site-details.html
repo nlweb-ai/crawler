@@ -399,10 +399,6 @@
                 }
 
                 try {
-                    // Set container styles
-                    container.style.minHeight = '400px';
-                    container.style.position = 'relative';
-
                     console.log('Initializing NLWeb widget for site:', siteUrl);
 
                     // Create the widget instance
@@ -413,31 +409,7 @@
                         endpoint: 'https://nlw.azurewebsites.net'
                     });
 
-                    console.log('NLWeb widget instance created:', nlwebChat);
-
-                    // Check DOM creation after a delay
-                    setTimeout(() => {
-                        console.log('Container innerHTML:', container.innerHTML);
-                        console.log('Container children:', container.children);
-
-                        const searchWrapper = container.querySelector('.nlweb-search-wrapper');
-                        const searchInput = container.querySelector('input');
-                        const resultsDropdown = container.querySelector('.nlweb-results-dropdown');
-
-                        console.log('Widget DOM check:', {
-                            hasSearchWrapper: !!searchWrapper,
-                            hasSearchInput: !!searchInput,
-                            hasResultsDropdown: !!resultsDropdown,
-                            childrenCount: container.children.length,
-                            firstChild: container.firstElementChild
-                        });
-
-                        // If no children were added, try to manually trigger initialization
-                        if (container.children.length === 0) {
-                            console.error('Widget failed to create DOM elements');
-                            container.innerHTML = '<p style="color: #e74c3c; padding: 1rem;">Widget failed to initialize. Check console for errors.</p>';
-                        }
-                    }, 1000);
+                    console.log('NLWeb widget initialized successfully');
 
                 } catch (error) {
                     console.error('Error initializing NLWeb widget:', error);
