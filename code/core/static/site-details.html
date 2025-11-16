@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Site Details - Schema Crawler</title>
     <!-- NLWeb Dropdown Widget CSS -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/nlweb-ai/NLWeb_Core@main/nlweb-ui/nlweb-dropdown-chat.css">
+    <link rel="stylesheet" href="https://nlw.azurewebsites.net/static/nlweb-dropdown-chat.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -420,8 +420,8 @@
     </div>
 
     <script type="module">
-        // Import the NLWeb Dropdown Chat module
-        import { NLWebDropdownChat } from 'https://cdn.jsdelivr.net/gh/nlweb-ai/NLWeb_Core@main/nlweb-ui/nlweb-dropdown-chat.js';
+        // Import the NLWeb Dropdown Chat module from the correct location
+        import { NLWebDropdownChat } from 'https://nlw.azurewebsites.net/static/nlweb-dropdown-chat.js';
 
         // Get site URL from query parameter
         const urlParams = new URLSearchParams(window.location.search);
@@ -440,15 +440,18 @@
                 try {
                     console.log('Initializing NLWeb widget for site:', siteUrl);
 
-                    // Create the widget instance
+                    // Create the widget instance with the correct configuration
                     const nlwebChat = new NLWebDropdownChat({
                         containerId: 'nlweb-search-container',
-                        site: siteUrl,
-                        placeholder: `Search within ${siteUrl}...`,
+                        site: siteUrl,  // Site-specific search scope
+                        placeholder: `Ask a question about ${siteUrl}...`,
                         endpoint: 'https://nlw.azurewebsites.net'
                     });
 
                     console.log('NLWeb widget initialized successfully');
+
+                    // Store the widget instance for potential programmatic access
+                    window.nlwebChat = nlwebChat;
 
                 } catch (error) {
                     console.error('Error initializing NLWeb widget:', error);
