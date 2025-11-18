@@ -417,12 +417,9 @@
         </div>
     </div>
 
-    <!-- NLWeb Widget Loader Script -->
-    <script src="https://nlw.azurewebsites.net/static/nlweb-widget-loader.js"></script>
-
     <script>
-        // Set the site parameter dynamically based on URL
-        window.addEventListener('DOMContentLoaded', () => {
+        // Set the site parameter BEFORE loading the widget
+        (function() {
             const urlParams = new URLSearchParams(window.location.search);
             const siteUrl = urlParams.get('site');
 
@@ -433,8 +430,11 @@
                     console.log('NLWeb widget configured for site:', siteUrl);
                 }
             }
-        });
+        })();
     </script>
+
+    <!-- NLWeb Widget Loader Script - Load AFTER setting the site attribute -->
+    <script src="https://nlw.azurewebsites.net/static/nlweb-widget-loader.js"></script>
 
     <script>
         // Check authentication
