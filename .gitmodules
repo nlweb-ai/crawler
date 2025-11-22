@@ -1,3 +1,4 @@
 [submodule "nlweb-submodule"]
 	path = nlweb-submodule
-	url = https://github.com/nlweb-ai/NLWeb.git
+	url = https://github.com/oidebrett/NLWeb.git
+	branch = dev
