@@ -29,8 +29,8 @@ def main():
     except ImportError as e:
         print(f"✗ Missing dependency: {e}")
         print("\nInstall with:")
-        print("  uv add requests")
-        print("  uv add pymssql")
+        print("  pip install requests")
+        print("  pip install pymssql")
         sys.exit(1)
 
     # Check queue status
