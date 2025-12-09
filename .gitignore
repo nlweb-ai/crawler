@@ -41,3 +41,6 @@ data/
 
 # Docker
 .dockerignore
+
+# Ensure test API key from create_test_user.py is not checked in accidentally
+.test_api_key
