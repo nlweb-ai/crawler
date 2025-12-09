@@ -11,7 +11,6 @@ Before running `make bootstrap`:
 * Install [Homebrew](https://brew.sh/)
 
 Run `make bootstrap` to create a virtual environment at `.venv` with requirements installed.
-* This will install `uv` if it is not installed.
 
 ### Deploy to Azure Kubernetes (Production)
 
