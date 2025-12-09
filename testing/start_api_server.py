@@ -25,13 +25,16 @@ def main():
     try:
         import flask
         import flask_cors
-        import pyodbc
+        try:
+            import pymssql
+        except Exception as e:
+            raise ImportError(f"pymssql import failed: {e!r}")
         print("✓ All dependencies installed")
     except ImportError as e:
         print(f"✗ Missing dependency: {e}")
         print("\nInstall with:")
         print("  pip install flask flask-cors")
-        print("  ./install_pyodbc_mac.sh  # For database support")
+        print("  pip install pymssql")
         sys.exit(1)
 
     # Set environment for API port

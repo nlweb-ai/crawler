@@ -4,10 +4,7 @@
 import sys
 import os
 
-# Add parent directory to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'core'))
-
-import master
+from ..core import master
 
 def test_schema_map_parsing():
     """Test parsing of our generated schema_map.xml files"""

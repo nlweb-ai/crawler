@@ -59,7 +59,7 @@ def get_connection():
     )
     return conn
 
-def create_tables(conn):
+def create_tables(conn: pymssql.Connection):
     """Create tables if they don't exist"""
     cursor = conn.cursor()
 
@@ -138,7 +138,7 @@ def create_tables(conn):
 
     conn.commit()
 
-def log_processing_error(conn, file_url, user_id, error_type, error_message, error_details=None):
+def log_processing_error(conn: pymssql.Connection, file_url, user_id, error_type, error_message, error_details=None):
     """Log a processing error for a file"""
     cursor = conn.cursor()
     cursor.execute("""
@@ -147,7 +147,7 @@ def log_processing_error(conn, file_url, user_id, error_type, error_message, err
     """, (file_url, user_id, error_type, error_message, error_details))
     conn.commit()
 
-def get_file_errors(conn, file_url, user_id, limit=50):
+def get_file_errors(conn: pymssql.Connection, file_url, user_id, limit=50):
     """Get recent errors for a file"""
     cursor = conn.cursor(as_dict=True)
     cursor.execute("""
@@ -158,7 +158,7 @@ def get_file_errors(conn, file_url, user_id, limit=50):
     """, (limit, file_url, user_id))
     return cursor.fetchall()
 
-def clear_file_errors(conn, file_url, user_id):
+def clear_file_errors(conn: pymssql.Connection, file_url: str, user_id: str):
     """Clear all errors for a file (called when file successfully processes)"""
     cursor = conn.cursor()
     cursor.execute("""
@@ -167,13 +167,13 @@ def clear_file_errors(conn, file_url, user_id):
     """, (file_url, user_id))
     conn.commit()
 
-def get_site_files(conn, site_url, user_id):
+def get_site_files(conn: pymssql.Connection, site_url: str, user_id: str):
     """Get all active files currently associated with a site"""
     cursor = conn.cursor()
     cursor.execute('SELECT file_url FROM files WHERE site_url = %s AND user_id = %s AND is_active = 1', (site_url, user_id))
     return [row[0] for row in cursor.fetchall()]
 
-def update_site_files(conn, site_url, user_id, current_files):
+def update_site_files(conn: pymssql.Connection, site_url: str, user_id: str, current_files: list[tuple[str, str, str]]):
     """Update files for a site, returns (added_files, removed_files)
 
     Args:
@@ -224,13 +224,13 @@ def update_site_files(conn, site_url, user_id, current_files):
         conn.commit()
         return (list(added), list(removed))
 
-def get_file_ids(conn, file_url, user_id):
+def get_file_ids(conn: pymssql.Connection, file_url: str, user_id: str) -> set[str]:
     """Get all IDs associated with a file"""
     cursor = conn.cursor()
     cursor.execute('SELECT id FROM ids WHERE file_url = %s AND user_id = %s', (file_url, user_id))
     return {row[0] for row in cursor.fetchall()}
 
-def update_file_ids(conn, file_url, user_id, current_ids):
+def update_file_ids(conn: pymssql.Connection, file_url: str, user_id: str, current_ids: set[str]):
     """Update IDs for a file, returns (added_ids, removed_ids)"""
     cursor = conn.cursor()
 
@@ -275,13 +275,13 @@ def update_file_ids(conn, file_url, user_id, current_ids):
     conn.commit()
     return (list(added), list(removed))
 
-def count_id_references(conn, id, user_id):
+def count_id_references(conn: pymssql.Connection, id: str, user_id: str):
     """Count how many files reference an ID"""
     cursor = conn.cursor()
     cursor.execute('SELECT COUNT(*) FROM ids WHERE id = %s AND user_id = %s', (id, user_id))
     return cursor.fetchone()[0]
 
-def clear_all_data(conn):
+def clear_all_data(conn: pymssql.Connection):
     """Clear all data from database tables (for testing)"""
     cursor = conn.cursor()
 
@@ -300,7 +300,7 @@ def clear_all_data(conn):
     conn.commit()
     print("  ✓ Database cleared successfully")
 
-def get_all_sites(conn, user_id):
+def get_all_sites(conn: pymssql.Connection, user_id: str):
     """Get all sites with their status"""
     cursor = conn.cursor()
     cursor.execute("""
@@ -320,7 +320,7 @@ def get_all_sites(conn, user_id):
         for row in cursor.fetchall()
     ]
 
-def add_site(conn, site_url, user_id, interval_hours=24):
+def add_site(conn: pymssql.Connection, site_url: str, user_id: str, interval_hours: int = 24):
     """Add a new site to monitor"""
     # Normalize site URL
     site_url = normalize_site_url(site_url)
@@ -347,7 +347,7 @@ def add_site(conn, site_url, user_id, interval_hours=24):
 
     conn.commit()
 
-def remove_site(conn, site_url, user_id):
+def remove_site(conn: pymssql.Connection, site_url: str, user_id: str):
     """Remove a site (hard delete from database)"""
     cursor = conn.cursor()
 
@@ -370,7 +370,7 @@ def remove_site(conn, site_url, user_id):
 
     conn.commit()
 
-def add_manual_schema_file(conn, site_url, user_id, file_url, schema_map=None):
+def add_manual_schema_file(conn: pymssql.Connection, site_url: str, user_id: str, file_url: str, schema_map=None):
     """Add a manual schema file for a site"""
     cursor = conn.cursor()
     # Check if file exists first
@@ -389,7 +389,7 @@ def add_manual_schema_file(conn, site_url, user_id, file_url, schema_map=None):
         """, (site_url, user_id, file_url, schema_map))
     conn.commit()
 
-def remove_schema_file(conn, file_url, user_id):
+def remove_schema_file(conn: pymssql.Connection, file_url: str, user_id: str):
     """Remove a schema file (soft delete)"""
     cursor = conn.cursor()
     cursor.execute("""
@@ -397,7 +397,7 @@ def remove_schema_file(conn, file_url, user_id):
     """, (file_url, user_id))
     conn.commit()
 
-def get_site_status(conn, user_id):
+def get_site_status(conn: pymssql.Connection, user_id: str):
     """Get status information for all sites for a specific user"""
     cursor = conn.cursor()
     cursor.execute("""
@@ -430,8 +430,8 @@ def get_site_status(conn, user_id):
 
 # ========== User Management Functions ==========
 
-def get_user_by_api_key(conn, api_key):
-    """Get user by API key"""
+def get_user_by_api_key(conn: pymssql.Connection, api_key: str) -> dict | None:
+    """Get user by API key. Returns `None` if not found."""
     cursor = conn.cursor()
     cursor.execute("""
         SELECT user_id, email, name, provider, api_key, created_at, last_login
@@ -452,7 +452,7 @@ def get_user_by_api_key(conn, api_key):
     return None
 
 
-def get_user_by_id(conn, user_id):
+def get_user_by_id(conn: pymssql.Connection, user_id: str) -> dict | None:
     """Get user by user_id"""
     cursor = conn.cursor()
     cursor.execute("""
@@ -474,7 +474,7 @@ def get_user_by_id(conn, user_id):
     return None
 
 
-def create_user(conn, user_id, email, name, provider):
+def create_user(conn: pymssql.Connection, user_id: str, email: str, name: str, provider: str) -> str:
     """Create a new user with auto-generated API key"""
     import secrets
     cursor = conn.cursor()
@@ -491,7 +491,7 @@ def create_user(conn, user_id, email, name, provider):
     return api_key
 
 
-def update_user_login(conn, user_id):
+def update_user_login(conn: pymssql.Connection, user_id: str):
     """Update last_login timestamp for a user"""
     cursor = conn.cursor()
     cursor.execute("""
@@ -502,7 +502,7 @@ def update_user_login(conn, user_id):
     conn.commit()
 
 
-def get_user_api_key(conn, user_id):
+def get_user_api_key(conn: pymssql.Connection, user_id: str) -> str | None:
     """Get user's API key"""
     cursor = conn.cursor()
     cursor.execute("""

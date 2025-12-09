@@ -4,6 +4,15 @@ A distributed web crawler designed to fetch and process schema.org structured da
 
 ## 🚀 Quick Start
 
+Before running `make bootstrap`:
+* Install [Python 3.12](https://www.python.org/downloads/release/python-31212/)
+* Install [Docker](https://www.docker.com/products/docker-desktop/)
+* Install [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl-macos/)
+* Install [Homebrew](https://brew.sh/)
+
+Run `make bootstrap` to create a virtual environment at `.venv` with requirements installed.
+* This will install `uv` if it is not installed.
+
 ### Deploy to Azure Kubernetes (Production)
 
 #### Option 1: Complete Setup from Scratch
@@ -53,10 +62,10 @@ See [Azure Deployment Guide](azure/README.md) for detailed instructions.
 ### Local Development
 ```bash
 # Start master service (API + Scheduler)
-./start_master.sh
+make master
 
 # Start worker service (in another terminal)
-./start_worker.sh
+make worker
 ```
 
 ## 📁 Project Structure
@@ -92,11 +101,18 @@ cp .env.example .env
 # Edit .env with your Azure resources
 ```
 
-Required environment variables:
-- `AZURE_SERVICEBUS_NAMESPACE` - Service Bus namespace
-- `DB_SERVER`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD` - SQL Database
-- `BLOB_STORAGE_ACCOUNT_NAME` - Storage account
-- `AZURE_SEARCH_ENDPOINT`, `AZURE_SEARCH_KEY` - AI Search (optional)
+Required environment variables (common):
+- `QUEUE_TYPE` - `file` (default), `servicebus`, or `storage`
+- `QUEUE_DIR` - directory for file queue (if `QUEUE_TYPE=file`)
+- `AZURE_SERVICEBUS_CONNECTION_STRING` or `AZURE_SERVICEBUS_NAMESPACE` and `AZURE_SERVICE_BUS_QUEUE_NAME` - Service Bus (if `QUEUE_TYPE=servicebus`)
+- `AZURE_STORAGE_CONNECTION_STRING` - Azure Storage (if `QUEUE_TYPE=storage`)
+- `DB_SERVER`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD` - SQL Server credentials (used by `pymssql`)
+- `BLOB_STORAGE_ACCOUNT_NAME` - Storage account (optional)
+- `AZURE_SEARCH_ENDPOINT`, `AZURE_SEARCH_KEY` - Azure Cognitive Search (optional)
+ 
+Ports and health endpoints:
+- Master API default port: `5001` (see `API_PORT` env var). Health/status endpoint: `/api/status`.
+- Worker status server default port: `8080` (env `WORKER_STATUS_PORT`) with `/status` and `/health` endpoints.
 
 ## 📊 API Endpoints
 

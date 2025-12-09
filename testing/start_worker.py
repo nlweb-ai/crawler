@@ -21,13 +21,16 @@ def main():
     # Check dependencies
     try:
         import requests
-        import pyodbc
+        try:
+            import pymssql
+        except Exception as e:
+            raise ImportError(f"pymssql import failed: {e!r}")
         print("✓ All dependencies installed")
     except ImportError as e:
         print(f"✗ Missing dependency: {e}")
         print("\nInstall with:")
-        print("  pip install requests")
-        print("  ./install_pyodbc_mac.sh  # For database support")
+        print("  uv add requests")
+        print("  uv add pymssql")
         sys.exit(1)
 
     # Check queue status
