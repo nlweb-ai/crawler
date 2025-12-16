@@ -1054,7 +1054,11 @@ if __name__ == '__main__':
     # Ensure database tables exist
     print("[STARTUP] Testing database connection...")
     conn = db.get_connection()
-    db.create_tables(conn)
+    try:
+        db.create_tables(conn)
+        print("[STARTUP] ✓ Database tables verified")
+    except Exception as e:
+        print(f"[STARTUP] Note: Table creation skipped (tables likely exist): {e}")
     conn.close()
     print("[STARTUP] ✓ Database connection successful")
 

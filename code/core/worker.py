@@ -90,18 +90,19 @@ def process_json_array(json_array):
             objects.append(item)
     return ids, objects
 
-def extract_schema_data_from_url(url):
+def extract_schema_data_from_url(url, content_type=None):
     """
-    Extracts schema data from a URL containing JSON content.
+    Extracts schema data from a URL containing JSON or TSV content.
 
     Args:
-        url (str): URL to fetch JSON data from
+        url (str): URL to fetch data from
+        content_type (str, optional): Content type hint (e.g., 'structuredData/schema.org+tsv')
 
     Returns:
         tuple: (list of @id values, list of JSON objects)
     """
     try:
-        # Fetch and parse JSON content
+        # Fetch content
         print(f"[WORKER] Fetching {url}")
         response = requests.get(url, timeout=30)
         status_code = response.status_code
@@ -110,6 +111,59 @@ def extract_schema_data_from_url(url):
         response.raise_for_status()
         print(f"[WORKER] Fetched {url}: {status_code} status, {content_length} bytes")
 
+        # Handle TSV format: URL\tJSON_STRING per line
+        if content_type and 'tsv' in content_type.lower():
+            print(f"[WORKER] Parsing TSV format (tab-separated URL and JSON)")
+            lines = response.text.strip().split('\n')
+            all_objects = []
+            
+            for i, line in enumerate(lines, 1):
+                line = line.strip()
+                if not line:
+                    continue
+                    
+                if '\t' not in line:
+                    print(f"[WORKER] Warning: Line {i} has no tab separator, skipping")
+                    continue
+                
+                try:
+                    # Split by tab: first part is URL, second part is JSON
+                    parts = line.split('\t', 1)
+                    if len(parts) != 2:
+                        print(f"[WORKER] Warning: Line {i} doesn't have exactly 2 parts, skipping")
+                        continue
+                    
+                    url_part, json_str = parts
+                    parsed = json.loads(json_str)
+                    
+                    # Handle both single object and array of objects
+                    if isinstance(parsed, list):
+                        # JSON is an array of objects
+                        for item in parsed:
+                            if isinstance(item, dict):
+                                if '@id' not in item:
+                                    item['@id'] = url_part.strip()
+                                all_objects.append(item)
+                    elif isinstance(parsed, dict):
+                        # JSON is a single object
+                        if '@id' not in parsed:
+                            parsed['@id'] = url_part.strip()
+                        all_objects.append(parsed)
+                    
+                except json.JSONDecodeError as e:
+                    print(f"[WORKER] Error parsing JSON on line {i}: {e}")
+                    continue
+            
+            if all_objects:
+                ids, objects = process_json_array(all_objects)
+                log_fetch(url, status_code, content_length, len(ids))
+                print(f"[WORKER] Extracted {len(ids)} IDs from {len(lines)} TSV lines in {url}")
+                return ids, objects
+            else:
+                print(f"[WORKER] No valid objects found in TSV file")
+                return [], []
+        
+        # Handle JSON format (existing logic)
         json_data = response.json()
 
         # Handle array of JSON objects
@@ -184,7 +238,7 @@ def process_job(conn, job):
             # Use existing extract_schema_data_from_url which returns (ids, objects)
             print(f"[WORKER] Calling extract_schema_data_from_url for {job['file_url']}")
             try:
-                ids, objects = extract_schema_data_from_url(job['file_url'])
+                ids, objects = extract_schema_data_from_url(job['file_url'], job.get('content_type'))
             except Exception as e:
                 error_msg = f"Failed to extract schema data: {str(e)}"
                 print(f"[WORKER ERROR] {error_msg}")
