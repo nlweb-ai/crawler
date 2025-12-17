@@ -112,33 +112,28 @@ def extract_schema_data_from_url(url):
 
         json_data = response.json()
 
-        # Handle array of JSON objects
-        if isinstance(json_data, list):
-            ids, objects = process_json_array(json_data)
-            log_fetch(url, status_code, content_length, len(ids))
-            print(f"[WORKER] Extracted {len(ids)} IDs from array in {url}")
-            return ids, objects
-
-        # Handle single JSON object
-        if isinstance(json_data, dict):
-            # Case: single object with @id
-            if '@id' in json_data:
-                ids, objects = process_json_array([json_data])
-                log_fetch(url, status_code, content_length, len(ids))
-                print(f"[WORKER] Extracted {len(ids)} IDs from single object in {url}")
-                return ids, objects
-
-            # Case: object with @graph array
-            if '@graph' in json_data and isinstance(json_data['@graph'], list):
-                ids, objects = process_json_array(json_data['@graph'])
-                log_fetch(url, status_code, content_length, len(ids))
-                print(f"[WORKER] Extracted {len(ids)} IDs from @graph in {url}")
-                return ids, objects
-
         # Default case: no valid schema data found
-        print(f"[WORKER] No valid schema data found in {url}")
-        log_fetch(url, status_code, content_length, 0, error="No valid schema data found")
-        return [], []
+        if type(json_data) is not dict and type(json_data) is not list:
+            print(f"[WORKER] No valid schema data found in {url}")
+            log_fetch(url, status_code, content_length, 0, error="No valid schema data found")
+            return [], []
+        
+        json_data = [json_data] if not isinstance(json_data, list) else json_data
+
+        ids, objects = process_json_array(json_data)
+        for obj in json_data:
+            # Check for @graph arrays within each object which do not have an @id
+            if isinstance(obj, dict) and '@graph' in obj and '@id' not in obj and isinstance(obj['@graph'], list):
+                graph_ids, graph_objects = process_json_array(obj['@graph'])
+                ids.extend(graph_ids)
+                objects.extend(graph_objects)
+        log_fetch(url, status_code, content_length, len(ids))
+        print(f"[WORKER] Extracted {len(ids)} IDs from array in {url}")
+        return ids, objects
+
+
+
+
 
     except requests.RequestException as e:
         error_msg = f"Request error: {str(e)}"
