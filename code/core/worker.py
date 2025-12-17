@@ -38,6 +38,14 @@ worker_status = {
 VECTOR_DB_LOG_FILE = '/app/data/vector_db_additions.jsonl'
 FETCH_LOG_FILE = '/app/data/fetch_log.jsonl'
 
+skip_types = (
+    "ListItem", "ItemList", "Organization", "BreadcrumbList",
+    "Breadcrumb", "WebSite", "SearchAction", "SiteNavigationElement",
+    "WebPageElement", "WebPage", "NewsMediaOrganization",
+    "MerchantReturnPolicy", "ReturnPolicy", "CollectionPage",
+    "Brand", "Corporation", "ReadAction"
+)
+
 def log_vector_db_addition(item_id, site_url, item_data):
     """Log items added to vector database"""
     try:
@@ -72,7 +80,7 @@ def log_fetch(url, status_code, content_length, num_ids, error=None):
     except Exception as e:
         print(f"[WORKER] Error logging fetch: {e}")
 
-def process_json_array(json_array):
+def old_process_json_array(json_array):
     """
     Helper function to process an array of JSON objects and extract @id values.
     
@@ -88,6 +96,29 @@ def process_json_array(json_array):
         if isinstance(item, dict) and '@id' in item:
             ids.append(item['@id'])
             objects.append(item)
+    return ids, objects
+
+def process_json_array(json_array):
+    ids = []
+    objects = []
+    for item in json_array:
+        if not isinstance(item, dict) or '@id' not in item:
+            continue
+        
+        # Check if should skip based on @type
+        item_type = item.get('@type')
+        should_skip = False
+        
+        if isinstance(item_type, str):
+            should_skip = item_type in skip_types
+        elif isinstance(item_type, list):
+            # Skip if ANY type in the list is in skip_types
+            should_skip = any(t in skip_types for t in item_type)
+        
+        if not should_skip:
+            ids.append(item['@id'])
+            objects.append(item)
+    
     return ids, objects
 
 def extract_schema_data_from_url(url, content_type=None):
@@ -115,7 +146,7 @@ def extract_schema_data_from_url(url, content_type=None):
         if content_type and 'tsv' in content_type.lower():
             print(f"[WORKER] Parsing TSV format (tab-separated URL and JSON)")
             lines = response.text.strip().split('\n')
-            all_objects = []
+            unique_objects = {}
             
             for i, line in enumerate(lines, 1):
                 line = line.strip()
@@ -136,63 +167,51 @@ def extract_schema_data_from_url(url, content_type=None):
                     url_part, json_str = parts
                     parsed = json.loads(json_str)
                     
-                    # Handle both single object and array of objects
-                    if isinstance(parsed, list):
-                        # JSON is an array of objects
-                        for item in parsed:
-                            if isinstance(item, dict):
-                                if '@id' not in item:
-                                    item['@id'] = url_part.strip()
-                                all_objects.append(item)
-                    elif isinstance(parsed, dict):
-                        # JSON is a single object
-                        if '@id' not in parsed:
-                            parsed['@id'] = url_part.strip()
-                        all_objects.append(parsed)
+                    temp_ids, temp_objects = process_json_array(parsed)
+                    for i, obj_id in enumerate(temp_ids):
+                        if obj_id not in unique_objects:  # Keep first occurrence
+                            unique_objects[obj_id] = temp_objects[i]
+                    for obj in parsed:
+                        # Check for @graph arrays within each object which do not have an @id
+                        if isinstance(obj, dict) and '@graph' in obj and '@id' not in obj and isinstance(obj['@graph'], list):
+                            graph_ids, graph_objects = process_json_array(obj['@graph'])
+                            for i, obj_id in enumerate(graph_ids):
+                                if obj_id not in unique_objects:  # Keep first occurrence
+                                    unique_objects[obj_id] = graph_objects[i]
+                    log_fetch(url, status_code, content_length, len(unique_objects))
+                    print(f"[WORKER] Extracted {len(unique_objects)} IDs from array in {url}")
+
                     
                 except json.JSONDecodeError as e:
                     print(f"[WORKER] Error parsing JSON on line {i}: {e}")
                     continue
-            
-            if all_objects:
-                ids, objects = process_json_array(all_objects)
-                log_fetch(url, status_code, content_length, len(ids))
-                print(f"[WORKER] Extracted {len(ids)} IDs from {len(lines)} TSV lines in {url}")
-                return ids, objects
-            else:
-                print(f"[WORKER] No valid objects found in TSV file")
-                return [], []
+            return list(unique_objects.keys()), list(unique_objects.values())
         
         # Handle JSON format (existing logic)
         json_data = response.json()
 
-        # Handle array of JSON objects
-        if isinstance(json_data, list):
-            ids, objects = process_json_array(json_data)
-            log_fetch(url, status_code, content_length, len(ids))
-            print(f"[WORKER] Extracted {len(ids)} IDs from array in {url}")
-            return ids, objects
+        if type(json_data) is not dict and type(json_data) is not list:
+            print(f"[WORKER] No valid schema data found in {url}")
+            log_fetch(url, status_code, content_length, 0, error="No valid schema data found")
+            return [], []
 
-        # Handle single JSON object
-        if isinstance(json_data, dict):
-            # Case: single object with @id
-            if '@id' in json_data:
-                ids, objects = process_json_array([json_data])
-                log_fetch(url, status_code, content_length, len(ids))
-                print(f"[WORKER] Extracted {len(ids)} IDs from single object in {url}")
-                return ids, objects
+        json_data = [json_data] if not isinstance(json_data, list) else json_data
 
-            # Case: object with @graph array
-            if '@graph' in json_data and isinstance(json_data['@graph'], list):
-                ids, objects = process_json_array(json_data['@graph'])
-                log_fetch(url, status_code, content_length, len(ids))
-                print(f"[WORKER] Extracted {len(ids)} IDs from @graph in {url}")
-                return ids, objects
-
-        # Default case: no valid schema data found
-        print(f"[WORKER] No valid schema data found in {url}")
-        log_fetch(url, status_code, content_length, 0, error="No valid schema data found")
-        return [], []
+        unique_objects = {}
+        temp_ids, temp_objects = process_json_array(json_data)
+        for i, obj_id in enumerate(temp_ids):
+            if obj_id not in unique_objects:  # Keep first occurrence
+                unique_objects[obj_id] = temp_objects[i]
+        for obj in json_data:
+            # Check for @graph arrays within each object which do not have an @id
+            if isinstance(obj, dict) and '@graph' in obj and '@id' not in obj and isinstance(obj['@graph'], list):
+                graph_ids, graph_objects = process_json_array(obj['@graph'])
+                for i, obj_id in enumerate(graph_ids):
+                    if obj_id not in unique_objects:  # Keep first occurrence
+                        unique_objects[obj_id] = graph_objects[i]
+        log_fetch(url, status_code, content_length, len(unique_objects))
+        print(f"[WORKER] Extracted {len(unique_objects)} IDs from array in {url}")
+        return list(unique_objects.keys()), list(unique_objects.values())
 
     except requests.RequestException as e:
         error_msg = f"Request error: {str(e)}"

@@ -111,27 +111,53 @@ domains=(
     "ambitiouskitchen.com"
 )
 
-# Process each domain
+# Helper function to wait for queue to be empty
+wait_for_queue_empty() {
+    echo "Waiting for queue to empty..."
+    while true; do
+        pending=$(curl -s "http://localhost:5001/api/queue/status" | grep -o '"pending_jobs":[0-9]*' | grep -o '[0-9]*')
+        if [ "$pending" = "0" ]; then
+            echo "Queue is empty"
+            break
+        fi
+        echo "  Queue has $pending pending jobs, waiting..."
+        sleep 5
+    done
+}
+
+# Process each domain one at a time
 for domain in "${domains[@]}"; do
-    # Convert domain to underscore format for URL (e.g., boingo.com -> boingo_com)
     domain_underscore=$(echo "$domain" | tr '.' '_')
     schema_map_url="${BASE_SCHEMA_URL}/${domain_underscore}/schema_map.xml"
     
     echo "========================================"
     echo "Processing: $domain"
-    echo "Schema map: $schema_map_url"
     echo "========================================"
     
-    # Add schema map to site
-    curl -X POST "${API_URL}/${domain}/schema-files" \
+    # Delete existing schema files
+    echo "Step 1: Deleting existing schema files..."
+    curl -s -X DELETE "${API_URL}/${domain}/schema-files" \
         -H "Content-Type: application/json" \
         -H "X-API-Key: ${API_KEY}" \
         -d "{\"schema_map_url\": \"${schema_map_url}\"}"
+    echo ""
     
-    echo -e "\n"
+    # Wait for deletions to complete
+    wait_for_queue_empty
     
-    # Small delay between requests to avoid overwhelming the server
-    sleep 1
+    # Add schema files
+    echo "Step 2: Adding schema files..."
+    curl -s -X POST "${API_URL}/${domain}/schema-files" \
+        -H "Content-Type: application/json" \
+        -H "X-API-Key: ${API_KEY}" \
+        -d "{\"schema_map_url\": \"${schema_map_url}\"}"
+    echo ""
+    
+    # Wait for additions to complete
+    wait_for_queue_empty
+    
+    echo "✓ Completed $domain"
+    echo ""
 done
 
 echo "========================================"
