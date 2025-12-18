@@ -15,12 +15,10 @@ help:
 	@echo "  make env-check     # Ensure .env exists"
 
 master: env-check
-	@echo "Starting master..."
-	@$(PYTHON) testing/start_api_server.py
+	@$(PYTHON) code/core/api.py
 
 worker: env-check
-	@echo "Starting worker..."
-	@$(PYTHON) testing/start_worker.py
+	@$(PYTHON) code/core/worker.py
 
 .PHONY: bootstrap
 

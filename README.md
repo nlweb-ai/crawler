@@ -99,15 +99,6 @@ Create a `.env` file with your Azure credentials:
 cp .env.example .env
 # Edit .env with your Azure resources
 ```
-
-Required environment variables (common):
-- `QUEUE_TYPE` - `file` (default), `servicebus`, or `storage`
-- `QUEUE_DIR` - directory for file queue (if `QUEUE_TYPE=file`)
-- `AZURE_SERVICEBUS_CONNECTION_STRING` or `AZURE_SERVICEBUS_NAMESPACE` and `AZURE_SERVICE_BUS_QUEUE_NAME` - Service Bus (if `QUEUE_TYPE=servicebus`)
-- `AZURE_STORAGE_CONNECTION_STRING` - Azure Storage (if `QUEUE_TYPE=storage`)
-- `DB_SERVER`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD` - SQL Server credentials (used by `pymssql`)
-- `BLOB_STORAGE_ACCOUNT_NAME` - Storage account (optional)
-- `AZURE_SEARCH_ENDPOINT`, `AZURE_SEARCH_KEY` - Azure Cognitive Search (optional)
  
 Ports and health endpoints:
 - Master API default port: `5001` (see `API_PORT` env var). Health/status endpoint: `/api/status`.

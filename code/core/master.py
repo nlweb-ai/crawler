@@ -6,10 +6,20 @@ from datetime import datetime
 import xml.etree.ElementTree as ET
 import config  # Load environment variables
 import db
-from queue_interface import get_queue
+# from queue_interface import get_queue
+import logging
+
+# Import appropriate queue interface based on QUEUE_TYPE
+queue_type = os.getenv('QUEUE_TYPE', 'file')
+if queue_type == 'storage':
+    from queue_interface_storage import get_queue_with_aad as get_queue
+else:
+    from queue_interface_aad import get_queue_with_aad as get_queue
 
 # Queue history log file
 QUEUE_LOG_FILE = '/app/data/queue_history.jsonl'
+
+logger = logging.getLogger()
 
 def log_queue_operation(operation_type, job_data, success=True, error=None):
     """Log queue operations to a local JSONL file"""
@@ -28,15 +38,15 @@ def log_queue_operation(operation_type, job_data, success=True, error=None):
         with open(QUEUE_LOG_FILE, 'a') as f:
             f.write(json.dumps(log_entry) + '\n')
     except Exception as e:
-        print(f"[MASTER] Error logging queue operation: {e}")
+        logger.error(f"[MASTER] Error logging queue operation: {e}")
 
 def parse_schema_map_xml(xml_content, base_url):
     """Parse schema_map.xml content and extract schema.org file URLs"""
     try:
         root = ET.fromstring(xml_content)
         
-        print(f"[MASTER] Root tag: {root.tag}")
-        print(f"[MASTER] Root attrib: {root.attrib}")
+        logger.info(f"[MASTER] Root tag: {root.tag}")
+        logger.info(f"[MASTER] Root attrib: {root.attrib}")
 
         # Handle namespace if present
         namespace = {'sitemap': 'http://www.sitemaps.org/schemas/sitemap/0.9'}
@@ -46,24 +56,24 @@ def parse_schema_map_xml(xml_content, base_url):
 
         # Try with namespace prefix first
         urls = root.findall('sitemap:url', namespace)
-        print(f"[MASTER] Found {len(urls)} urls with namespace prefix")
+        logger.info(f"[MASTER] Found {len(urls)} urls with namespace prefix")
         
         if not urls:
             # Try with default namespace (Clark notation)
             urls = root.findall('{%s}url' % ns_uri)
-            print(f"[MASTER] Found {len(urls)} urls with Clark notation")
+            logger.info(f"[MASTER] Found {len(urls)} urls with Clark notation")
             
         if not urls:
             # Try without namespace
             urls = root.findall('url')
-            print(f"[MASTER] Found {len(urls)} urls without namespace")
+            logger.info(f"[MASTER] Found {len(urls)} urls without namespace")
 
-        print(f"[MASTER] Total urls found: {len(urls)}")
+        logger.info(f"[MASTER] Total urls found: {len(urls)}")
 
         for url_elem in urls:
             # Check if this URL has structuredData/schema.org content type
             content_type = url_elem.get('contentType', '')
-            print(f"[MASTER] URL element contentType: {content_type}")
+            logger.info(f"[MASTER] URL element contentType: {content_type}")
             
             if 'schema.org' in content_type.lower():
                 # Get the location - try multiple namespace formats
@@ -76,14 +86,14 @@ def parse_schema_map_xml(xml_content, base_url):
                 if loc is not None and loc.text:
                     # Make URL absolute if needed
                     url = urljoin(base_url, loc.text.strip())
-                    print(f"[MASTER] Adding URL: {url} with content_type: {content_type}")
+                    logger.info(f"[MASTER] Adding URL: {url} with content_type: {content_type}")
                     # Return tuple of (url, content_type) to pass format info to worker
                     schema_urls.append((url, content_type))
 
-        print(f"[MASTER] Total schema URLs extracted: {len(schema_urls)}")
+        logger.info(f"[MASTER] Total schema URLs extracted: {len(schema_urls)}")
         return schema_urls
     except ET.ParseError as e:
-        print(f"Error parsing XML: {e}")
+        logger.error(f"[MASTER] Error parsing XML: {e}")
         return []
 
 def get_schema_urls_from_robots(site_url):
@@ -116,7 +126,7 @@ def get_schema_urls_from_robots(site_url):
                             # Return triples of (site_url, schema_map_url, (json_file_url, content_type))
                             all_schema_files.extend([(site_url, map_url, url_tuple) for url_tuple in url_tuples])
                     except requests.RequestException as e:
-                        print(f"Error fetching schema map from {map_url}: {e}")
+                        logger.error(f"[MASTER] Error fetching schema map from {map_url}: {e}")
                 return all_schema_files
     except requests.RequestException:
         pass  # Try schema_map.xml next
@@ -142,9 +152,8 @@ def get_schema_urls_from_robots(site_url):
                 # Return triples of (site_url, schema_map_url, (json_file_url, content_type))
                 return [(site_url, site_url, url_tuple) for url_tuple in url_tuples]
         except requests.RequestException as e:
-            print(f"Error fetching schema map from {site_url}: {e}")
+            logger.error(f"[MASTER] Error fetching schema map from {site_url}: {e}")
 
-    print(f"No schema files found for {site_url}")
     return []
 
 def add_schema_map_to_site(site_url, user_id, schema_map_url):
@@ -168,16 +177,16 @@ def add_schema_map_to_site(site_url, user_id, schema_map_url):
         # Fetch and parse the schema_map to get all JSON file URLs
         response = requests.get(schema_map_url, timeout=10)
         if response.status_code != 200:
-            print(f"[MASTER] Failed to fetch schema_map {schema_map_url}: HTTP {response.status_code}")
+            logger.error(f"[MASTER] Failed to fetch schema_map {schema_map_url}: HTTP {response.status_code}")
             return (0, 0)
 
-        print(f"[MASTER] Fetched schema_map, parsing with base_url: {site_url}")
+        logger.info(f"[MASTER] Fetched schema_map, parsing with base_url: {site_url}")
         json_file_url_tuples = parse_schema_map_xml(response.text, site_url)
-        print(f"[MASTER] Parsed {len(json_file_url_tuples)} files from schema_map")
+        logger.info(f"[MASTER] Parsed {len(json_file_url_tuples)} files from schema_map")
 
         if not json_file_url_tuples:
-            print(f"[MASTER] No schema files found in {schema_map_url}")
-            print(f"[MASTER] Response preview: {response.text[:500]}")
+            logger.info(f"[MASTER] No schema files found in {schema_map_url}")
+            logger.info(f"[MASTER] Response preview: {response.text[:500]}")
             return (0, 0)
 
         # Create triples: (site_url, schema_map_url, file_url) for database
@@ -186,18 +195,16 @@ def add_schema_map_to_site(site_url, user_id, schema_map_url):
 
         # Add all files to the database
         added_files, removed_files = db.update_site_files(conn, site_url, user_id, files_to_add)
-        print(f"[MASTER] Database update: {len(added_files)} files added, {len(removed_files)} removed")
-        print(f"[MASTER] Added files: {added_files}")
+        logger.info(f"[MASTER] Database update: {len(added_files)} files added, {len(removed_files)} removed")
+        logger.info(f"[MASTER] Added files: {added_files}")
 
         # Create a lookup dict for content_type by file_url
         content_type_map = {url_tuple[0]: url_tuple[1] for url_tuple in json_file_url_tuples}
-        print(f"[MASTER] Content type map: {content_type_map}")
-
+        logger.info(f"[MASTER] Content type map: {content_type_map}")
         # Queue jobs for NEW files only
         queue = get_queue()
         queued_count = 0
-        print(f"[MASTER] Starting to queue {len(added_files)} jobs...")
-
+        logger.info(f"[MASTER] Starting to queue {len(added_files)} jobs...")
         for file_url in added_files:
             try:
                 content_type = content_type_map.get(file_url)
@@ -223,7 +230,7 @@ def add_schema_map_to_site(site_url, user_id, schema_map_url):
             except Exception as e:
                 log_queue_operation('queue_file', job, success=False, error=e)
 
-        print(f"[MASTER] Queued {queued_count} process_file jobs")
+        logger.info(f"[MASTER] Queued {queued_count} process_file jobs")
 
         # Queue jobs for REMOVED files
         for file_url in removed_files:
@@ -246,7 +253,7 @@ def add_schema_map_to_site(site_url, user_id, schema_map_url):
         return (len(added_files), queued_count)
 
     except Exception as e:
-        print(f"[MASTER] Error adding schema map {schema_map_url} to site {site_url}: {e}")
+        logger.error(f"[MASTER] Error adding schema map {schema_map_url} to site {site_url}: {e}")
         return (0, 0)
     finally:
         if conn:
@@ -270,25 +277,25 @@ def process_site(site_url, user_id):
         schema_map_urls = list(set(schema_map for _, schema_map, _ in triples))
 
         if not schema_map_urls:
-            print(f"[MASTER] No schema maps found for {site_url}")
+            logger.warning(f"[MASTER] No schema maps found for {site_url}")
             return False
 
-        print(f"[MASTER] Found {len(schema_map_urls)} schema map(s) for {site_url}")
+        logger.info(f"[MASTER] Found {len(schema_map_urls)} schema map(s) for {site_url}")
 
         # For each discovered schema map, use Level 2 logic to add it
         total_files = 0
         total_queued = 0
         for schema_map_url in schema_map_urls:
-            print(f"[MASTER] Adding schema map: {schema_map_url}")
+            logger.info(f"[MASTER] Adding schema map: {schema_map_url}")
             files_added, files_queued = add_schema_map_to_site(site_url, user_id, schema_map_url)
             total_files += files_added
             total_queued += files_queued
 
-        print(f"[MASTER] Processed {site_url}: {total_files} files added, {total_queued} queued")
+        logger.info(f"[MASTER] Processed {site_url}: {total_files} files added, {total_queued} queued")
         return True
 
     except Exception as e:
-        print(f"[MASTER] Unexpected error processing {site_url}: {e}")
+        logger.error(f"[MASTER] Unexpected error processing {site_url}: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -299,6 +306,6 @@ if __name__ == '__main__':
     # Simple command line interface
     import sys
     if len(sys.argv) != 2:
-        print("Usage: python master.py <site_url>")
+        logger.error("[MASTER] Usage: python master.py <site_url>")
         sys.exit(1)
     process_site(sys.argv[1])

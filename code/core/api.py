@@ -1,9 +1,11 @@
+import logging
+import sys
 from flask import Flask, request, jsonify, send_from_directory, redirect, url_for
 from flask_cors import CORS
 from flask_login import login_user, logout_user
 import db
 from master import process_site
-from queue_interface import get_queue
+from queue_interface import FileQueue, get_queue
 import asyncio
 import os
 import time
@@ -25,6 +27,9 @@ event_loop = None
 
 # Track when master started
 master_started_at = datetime.utcnow()
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s:%(message)s')
+logger = logging.getLogger()
 
 # ========== Authentication Routes ==========
 
@@ -59,30 +64,30 @@ def github_login():
     if not auth.github:
         return jsonify({'error': 'GitHub OAuth not configured'}), 500
     redirect_uri = url_for('github_callback', _external=True)
-    print(f"[AUTH] GitHub OAuth redirect_uri: {redirect_uri}")
+    logging.info(f"[AUTH] GitHub OAuth redirect_uri: {redirect_uri}")
     return auth.github.authorize_redirect(redirect_uri)
 
 
 @app.route('/auth/github/callback')
 def github_callback():
     """Handle GitHub OAuth callback"""
-    print("[AUTH] GitHub callback received")
+    logging.info("[AUTH] GitHub callback received")
     if not auth.github:
-        print("[AUTH] GitHub OAuth not configured")
+        logging.error("[AUTH] GitHub OAuth not configured")
         return jsonify({'error': 'GitHub OAuth not configured'}), 500
 
     try:
-        print("[AUTH] Authorizing GitHub access token...")
+        logging.info("[AUTH] Authorizing GitHub access token...")
         token = auth.github.authorize_access_token()
-        print("[AUTH] Getting GitHub user info...")
+        logging.info("[AUTH] Getting GitHub user info...")
         resp = auth.github.get('user', token=token)
         user_info = resp.json()
-        print(f"[AUTH] GitHub user info received: {user_info.get('login')}, id={user_info.get('id')}")
+        logging.info(f"[AUTH] GitHub user info received: {user_info.get('login')}, id={user_info.get('id')}")
 
         # Get user email (may require additional API call)
         email = user_info.get('email')
         if not email:
-            print("[AUTH] Email not in user info, fetching from /user/emails...")
+            logging.info("[AUTH] Email not in user info, fetching from /user/emails...")
             email_resp = auth.github.get('user/emails', token=token)
             emails = email_resp.json()
             # Get primary email
@@ -92,25 +97,25 @@ def github_callback():
                     break
             if not email and emails:
                 email = emails[0].get('email')
-            print(f"[AUTH] Email fetched: {email}")
+            logging.info(f"[AUTH] Email fetched: {email}")
 
         # Create user_id from GitHub ID
         user_id = f"github:{user_info['id']}"
         name = user_info.get('name') or user_info.get('login')
-        print(f"[AUTH] Creating user_id: {user_id}, name: {name}")
+        logging.info(f"[AUTH] Creating user_id: {user_id}, name: {name}")
 
         # Get or create user
         user = auth.get_or_create_user(user_id, email, name, 'github')
 
         # Log user in
         login_user(user)
-        print(f"[AUTH] User logged in successfully: {user_id}")
+        logging.info(f"[AUTH] User logged in successfully: {user_id}")
 
         # Redirect to main page
         return redirect('/')
 
     except Exception as e:
-        print(f"[AUTH] GitHub OAuth error: {e}")
+        logging.error(f"[AUTH] GitHub OAuth error: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': 'Authentication failed'}), 500
@@ -128,40 +133,40 @@ def microsoft_login():
 @app.route('/auth/microsoft/callback')
 def microsoft_callback():
     """Handle Microsoft OAuth callback"""
-    print("[AUTH] Microsoft callback received")
+    logging.info("[AUTH] Microsoft callback received")
     if not auth.microsoft:
-        print("[AUTH] Microsoft OAuth not configured")
+        logging.error("[AUTH] Microsoft OAuth not configured")
         return jsonify({'error': 'Microsoft OAuth not configured'}), 500
 
     try:
-        print("[AUTH] Authorizing Microsoft access token...")
+        logging.info("[AUTH] Authorizing Microsoft access token...")
         token = auth.microsoft.authorize_access_token()
         user_info = token.get('userinfo')
 
         if not user_info:
-            print("[AUTH] Failed to get user info from token")
+            logging.error("[AUTH] Failed to get user info from token")
             return jsonify({'error': 'Failed to get user info'}), 500
 
-        print(f"[AUTH] Microsoft user info received: oid={user_info.get('oid')}")
+        logging.info(f"[AUTH] Microsoft user info received: oid={user_info.get('oid')}")
 
         # Create user_id from Microsoft OID
         user_id = f"microsoft:{user_info['oid']}"
         email = user_info.get('email') or user_info.get('preferred_username')
         name = user_info.get('name')
-        print(f"[AUTH] Creating user_id: {user_id}, name: {name}, email: {email}")
+        logging.info(f"[AUTH] Creating user_id: {user_id}, name: {name}, email: {email}")
 
         # Get or create user
         user = auth.get_or_create_user(user_id, email, name, 'microsoft')
 
         # Log user in
         login_user(user)
-        print(f"[AUTH] User logged in successfully: {user_id}")
+        logging.info(f"[AUTH] User logged in successfully: {user_id}")
 
         # Redirect to main page
         return redirect('/')
 
     except Exception as e:
-        print(f"[AUTH] Microsoft OAuth error: {e}")
+        logging.error(f"[AUTH] Microsoft OAuth error: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': 'Authentication failed'}), 500
@@ -250,12 +255,12 @@ def add_site():
                 try:
                     asyncio.run_coroutine_threadsafe(process_site_async(site_url, user_id), event_loop)
                 except Exception as e:
-                    print(f"[API] Warning: Could not start async processing for {site_url}: {e}")
+                    logging.warning(f"[API] Could not start async processing for {site_url}: {e}")
             return jsonify({'success': True, 'site_url': site_url})
         finally:
             conn.close()
     except Exception as e:
-        print(f"[API] Error in add_site: {e}")
+        logging.error(f"[API] Error in add_site: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/sites/<path:site_url>', methods=['GET'])
@@ -301,7 +306,7 @@ def get_site_details(site_url):
             results = search_client.search('*', filter=f"site eq '{site_url}'", top=0, include_total_count=True)
             vector_db_count = results.get_count()
         except Exception as e:
-            print(f"[API] Error getting vector DB count: {e}")
+            logging.error(f"[API] Error getting vector DB count: {e}")
             vector_db_count = 0
 
         return jsonify({
@@ -341,6 +346,8 @@ def delete_site(site_url):
         # Finally delete the site itself
         cursor.execute("DELETE FROM sites WHERE site_url = %s AND user_id = %s", (site_url, user_id))
         conn.commit()
+
+        logger.info(f"Queued removal of {total_files_removed} files under {len(schema_maps)} schema maps from site {site_url}")
 
         return jsonify({
             'success': True,
@@ -668,12 +675,12 @@ def trigger_process(site_url):
             try:
                 asyncio.run_coroutine_threadsafe(process_site_async(site_url, user_id), event_loop)
             except Exception as e:
-                print(f"[API] Warning: Could not trigger processing for {site_url}: {e}")
+                logging.warning(f"[API] Could not trigger processing for {site_url}: {e}")
         else:
-            print("[API] Warning: Event loop not initialized")
+            logging.warning("[API] Event loop not initialized")
         return jsonify({'success': True, 'message': f'Processing started for {site_url}'})
     except Exception as e:
-        print(f"[API] Error in trigger_process: {e}")
+        logging.error(f"[API] Error in trigger_process: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/scheduler/status', methods=['GET'])
@@ -956,13 +963,13 @@ async def process_site_async(site_url, user_id):
         # Run process_site in a thread pool to avoid blocking the event loop
         await asyncio.get_event_loop().run_in_executor(None, process_site, site_url, user_id)
     except Exception as e:
-        print(f"[API] Error processing site {site_url}: {e}")
+        logging.error(f"[API] Error processing site {site_url}: {e}")
 
 async def scheduler_loop():
     """Background scheduler that periodically checks sites for reprocessing"""
     global scheduler_running
 
-    print("[SCHEDULER] Started background scheduler")
+    logging.info("[SCHEDULER] Started background scheduler")
 
     while scheduler_running:
         try:
@@ -984,16 +991,16 @@ async def scheduler_loop():
             sites_to_process = cursor.fetchall()
 
             if sites_to_process:
-                print(f"[SCHEDULER] Found {len(sites_to_process)} sites to process")
+                logging.info(f"[SCHEDULER] Found {len(sites_to_process)} sites to process")
 
                 # Create tasks for all sites to process concurrently
                 tasks = []
                 for site_url, user_id, interval_hours, last_processed in sites_to_process:
                     if last_processed:
                         time_since = datetime.utcnow() - last_processed
-                        print(f"[SCHEDULER] Processing {site_url} for user {user_id} (last processed {time_since} ago)")
+                        logging.info(f"[SCHEDULER] Processing {site_url} for user {user_id} (last processed {time_since} ago)")
                     else:
-                        print(f"[SCHEDULER] Processing {site_url} for user {user_id} (never processed before)")
+                        logging.info(f"[SCHEDULER] Processing {site_url} for user {user_id} (never processed before)")
 
                     # Add to task list for concurrent processing
                     tasks.append(process_site_async(site_url, user_id))
@@ -1004,12 +1011,12 @@ async def scheduler_loop():
                     results = await asyncio.gather(*tasks, return_exceptions=True)
                     for i, result in enumerate(results):
                         if isinstance(result, Exception):
-                            print(f"[SCHEDULER] Error processing site {sites_to_process[i][0]}: {result}")
+                            logging.error(f"[SCHEDULER] Error processing site {sites_to_process[i][0]}: {result}")
 
             conn.close()
 
         except Exception as e:
-            print(f"[SCHEDULER] Error in scheduler loop: {e}")
+            logging.error(f"[SCHEDULER] Error in scheduler loop: {e}")
             # Try to close connection if it exists
             try:
                 if 'conn' in locals() and conn:
@@ -1020,26 +1027,26 @@ async def scheduler_loop():
         # Sleep for 60 seconds between checks
         await asyncio.sleep(60)
 
-    print("[SCHEDULER] Stopped")
+    logging.info("[SCHEDULER] Stopped")
 
 def start_scheduler():
     """Start the background scheduler task"""
     global scheduler_task, scheduler_running, event_loop
 
     if scheduler_task and not scheduler_task.done():
-        print("[SCHEDULER] Already running")
+        logging.info("[SCHEDULER] Already running")
         return
 
     scheduler_running = True
     if event_loop:
         scheduler_task = asyncio.run_coroutine_threadsafe(scheduler_loop(), event_loop)
-        print("[SCHEDULER] Starting background scheduler task")
+        logging.info("[SCHEDULER] Starting background scheduler task")
 
 def stop_scheduler():
     """Stop the background scheduler task"""
     global scheduler_running, scheduler_task
     scheduler_running = False
-    print("[SCHEDULER] Stopping scheduler...")
+    logging.info("[SCHEDULER] Stopping scheduler...")
     if scheduler_task:
         scheduler_task.cancel()
 
@@ -1052,20 +1059,19 @@ def run_event_loop():
 
 if __name__ == '__main__':
     # Ensure database tables exist
-    print("[STARTUP] Testing database connection...")
+    logging.info("[STARTUP] Testing database connection...")
     conn = db.get_connection()
     try:
         db.create_tables(conn)
-        print("[STARTUP] ✓ Database tables verified")
+        logging.info("[STARTUP] ✓ Database tables verified")
     except Exception as e:
-        print(f"[STARTUP] Note: Table creation skipped (tables likely exist): {e}")
+        logging.info(f"[STARTUP] Note: Table creation skipped (tables likely exist): {e}")
     conn.close()
-    print("[STARTUP] ✓ Database connection successful")
-
+    logging.info("[STARTUP] ✓ Database connection successful")
     # Test Queue connectivity
     queue_type = os.getenv('QUEUE_TYPE', 'file')
     if queue_type == 'servicebus':
-        print("[STARTUP] Testing Service Bus connection...")
+        logging.info("[STARTUP] Testing Service Bus connection...")
         try:
             from azure.servicebus import ServiceBusClient
             from azure.identity import DefaultAzureCredential
@@ -1076,25 +1082,27 @@ if __name__ == '__main__':
 
             if conn_str:
                 client = ServiceBusClient.from_connection_string(conn_str)
-                print("[STARTUP] Using Service Bus connection string")
+                logging.info("[STARTUP] Using Service Bus connection string")
             elif namespace:
                 credential = DefaultAzureCredential()
                 fully_qualified_namespace = namespace if '.servicebus.windows.net' in namespace else f"{namespace}.servicebus.windows.net"
                 client = ServiceBusClient(fully_qualified_namespace, credential)
-                print(f"[STARTUP] Using Azure AD auth for namespace: {fully_qualified_namespace}")
+                logging.info(f"[STARTUP] Using Azure AD auth for namespace: {fully_qualified_namespace}")
             else:
-                print("[STARTUP] ✗ Service Bus not configured - no connection string or namespace found")
+                logging.error("[STARTUP] ✗ Service Bus not configured - no connection string or namespace found")
                 sys.exit(1)
 
-            # Test connection by peeking at queue
+            # Test connection by grabbing a message and returning it to the queue
             with client.get_queue_receiver(queue_name, max_wait_time=5) as receiver:
-                receiver.peek_messages(max_message_count=1)
-            print(f"[STARTUP] ✓ Service Bus connection successful (queue: {queue_name})")
+                msgs = receiver.receive_messages(max_message_count=1, max_wait_time=1)
+                if msgs:
+                    receiver.abandon_message(msgs[0])
+            logging.info(f"[STARTUP] ✓ Service Bus connection successful (queue: {queue_name})")
         except Exception as e:
-            print(f"[STARTUP] ✗ Service Bus connection failed: {str(e)}")
+            logging.error(f"[STARTUP] ✗ Service Bus connection failed: {str(e)}")
             sys.exit(1)
     elif queue_type == 'storage':
-        print("[STARTUP] Testing Storage Queue connection...")
+        logging.info("[STARTUP] Testing Storage Queue connection...")
         try:
             from azure.storage.queue import QueueServiceClient
             from azure.identity import DefaultAzureCredential
@@ -1103,7 +1111,7 @@ if __name__ == '__main__':
             queue_name = os.getenv('AZURE_STORAGE_QUEUE_NAME', 'crawler-jobs')
 
             if not storage_account:
-                print("[STARTUP] ✗ Storage Queue not configured - AZURE_STORAGE_ACCOUNT_NAME not set")
+                logging.error("[STARTUP] ✗ Storage Queue not configured - AZURE_STORAGE_ACCOUNT_NAME not set")
                 sys.exit(1)
 
             account_url = f"https://{storage_account}.queue.core.windows.net"
@@ -1113,13 +1121,13 @@ if __name__ == '__main__':
 
             # Test connection by checking queue properties
             queue_client.get_queue_properties()
-            print(f"[STARTUP] ✓ Storage Queue connection successful (queue: {queue_name})")
+            logging.info(f"[STARTUP] ✓ Storage Queue connection successful (queue: {queue_name})")
 
             # Ensure queue exists (create if needed)
             from queue_interface_storage import ensure_queue_exists
             ensure_queue_exists(storage_account, queue_name)
         except Exception as e:
-            print(f"[STARTUP] ✗ Storage Queue connection failed: {str(e)}")
+            logging.error(f"[STARTUP] ✗ Storage Queue connection failed: {str(e)}")
             sys.exit(1)
 
     # Start asyncio event loop in background

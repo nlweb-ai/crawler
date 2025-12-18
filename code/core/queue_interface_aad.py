@@ -6,12 +6,13 @@ import os
 import json
 from typing import Optional, Dict, Any
 from queue_interface import QueueInterface, QueueMessage
+from azure.identity import AzureCliCredential
 
 
 class AzureServiceBusQueueAAD(QueueInterface):
     """Azure Service Bus queue implementation using Azure AD authentication"""
 
-    def __init__(self, namespace: str, queue_name: str = 'jobs'):
+    def __init__(self, namespace: str, queue_name: str):
         from azure.identity import DefaultAzureCredential, ManagedIdentityCredential
         from azure.servicebus import ServiceBusClient
         import os
@@ -24,12 +25,12 @@ class AzureServiceBusQueueAAD(QueueInterface):
         else:
             self.fully_qualified_namespace = f"{namespace}.servicebus.windows.net"
 
-        # Use DefaultAzureCredential which automatically handles:
+        # Use DefaultUsing Azure Service Bus with AAD authenticationAzureCredential which automatically handles:
         # - Workload Identity (when AZURE_FEDERATED_TOKEN_FILE is set)
         # - Managed Identity (when running in Azure)
         # - Azure CLI (when running locally)
         print("[Queue] Using DefaultAzureCredential (supports Workload Identity)")
-        self.credential = DefaultAzureCredential()
+        self.credential = AzureCliCredential()
         self._client = None
 
     def _get_client(self):
@@ -115,9 +116,10 @@ def get_queue_with_aad() -> QueueInterface:
     elif queue_type == 'servicebus':
         # Try AAD authentication first
         namespace = os.getenv('AZURE_SERVICEBUS_NAMESPACE')
+        queue_name = os.getenv('AZURE_SERVICE_BUS_QUEUE_NAME', 'crawler-jobs')
         if namespace:
-            print(f"[Queue] Using Azure Service Bus with AAD authentication: {namespace}")
-            return AzureServiceBusQueueAAD(namespace)
+            print(f"[Queue] Using Azure Service Bus with AAD authentication: {namespace}/{queue_name}")
+            return AzureServiceBusQueueAAD(namespace, queue_name)
 
         # Fall back to connection string if available
         conn_str = os.getenv('AZURE_SERVICEBUS_CONNECTION_STRING')
