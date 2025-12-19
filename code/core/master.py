@@ -6,18 +6,11 @@ from datetime import datetime
 import xml.etree.ElementTree as ET
 import config  # Load environment variables
 import db
-# from queue_interface import get_queue
+from queue_provider import get_queue_from_env
 import logging
 
-# Import appropriate queue interface based on QUEUE_TYPE
-queue_type = os.getenv('QUEUE_TYPE', 'file')
-if queue_type == 'storage':
-    from queue_interface_storage import get_queue_with_aad as get_queue
-else:
-    from queue_interface_aad import get_queue_with_aad as get_queue
-
 # Queue history log file
-QUEUE_LOG_FILE = '/app/data/queue_history.jsonl'
+QUEUE_LOG_FILE = os.getenv('QUEUE_LOG_FILE', '/app/data/queue_history.jsonl')
 
 logger = logging.getLogger()
 
@@ -202,7 +195,7 @@ def add_schema_map_to_site(site_url, user_id, schema_map_url):
         content_type_map = {url_tuple[0]: url_tuple[1] for url_tuple in json_file_url_tuples}
         logger.info(f"[MASTER] Content type map: {content_type_map}")
         # Queue jobs for NEW files only
-        queue = get_queue()
+        queue = get_queue_from_env()
         queued_count = 0
         logger.info(f"[MASTER] Starting to queue {len(added_files)} jobs...")
         for file_url in added_files:
@@ -277,7 +270,7 @@ def process_site(site_url, user_id):
         schema_map_urls = list(set(schema_map for _, schema_map, _ in triples))
 
         if not schema_map_urls:
-            logger.warning(f"[MASTER] No schema maps found for {site_url}")
+            logger.debug(f"[MASTER] No schema maps found for {site_url}")
             return False
 
         logger.info(f"[MASTER] Found {len(schema_map_urls)} schema map(s) for {site_url}")

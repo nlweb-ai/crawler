@@ -12,15 +12,10 @@ from flask import Flask, jsonify
 sys.path.insert(0, os.path.dirname(__file__))
 import config  # Load environment variables
 import db
-from vector_db import vector_db_add, vector_db_delete
+from vector_db import MAX_BATCH_DELETE_IDS, vector_db_batch_delete
 from scheduler import update_site_last_processed
-
-# Import appropriate queue interface based on QUEUE_TYPE
-queue_type = os.getenv('QUEUE_TYPE', 'file')
-if queue_type == 'storage':
-    from queue_interface_storage import get_queue_with_aad as get_queue
-else:
-    from queue_interface_aad import get_queue_with_aad as get_queue
+from queue_provider import get_queue_from_env
+import logging
 
 # Global worker status
 worker_status = {
@@ -35,8 +30,8 @@ worker_status = {
 }
 
 # Log files
-VECTOR_DB_LOG_FILE = '/app/data/vector_db_additions.jsonl'
-FETCH_LOG_FILE = '/app/data/fetch_log.jsonl'
+VECTOR_DB_LOG_FILE = os.getenv('VECTOR_DB_LOG_FILE', '/app/data/vector_db_log.jsonl')
+FETCH_LOG_FILE = os.getenv('FETCH_LOG_FILE', '/app/data/fetch_log.jsonl')
 
 skip_types = (
     "ListItem", "ItemList", "Organization", "BreadcrumbList",
@@ -45,6 +40,12 @@ skip_types = (
     "MerchantReturnPolicy", "ReturnPolicy", "CollectionPage",
     "Brand", "Corporation", "ReadAction"
 )
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s:%(message)s')
+# AMQP and Azure SDKs log at INFO, but are extremely noisy. This quiets them down.
+logging.getLogger("azure").setLevel(logging.WARNING)
+logging.getLogger("azure.identity").setLevel(logging.WARNING)
+logger = logging.getLogger()
 
 def log_vector_db_addition(item_id, site_url, item_data):
     """Log items added to vector database"""
@@ -60,7 +61,7 @@ def log_vector_db_addition(item_id, site_url, item_data):
         with open(VECTOR_DB_LOG_FILE, 'a') as f:
             f.write(json.dumps(log_entry) + '\n')
     except Exception as e:
-        print(f"[WORKER] Error logging vector DB addition: {e}")
+        logger.error(f"[WORKER] Error logging vector DB addition: {e}", exc_info=True)
 
 def log_fetch(url, status_code, content_length, num_ids, error=None):
     """Log every URL fetch attempt with details"""
@@ -78,7 +79,7 @@ def log_fetch(url, status_code, content_length, num_ids, error=None):
         with open(FETCH_LOG_FILE, 'a') as f:
             f.write(json.dumps(log_entry) + '\n')
     except Exception as e:
-        print(f"[WORKER] Error logging fetch: {e}")
+        logger.error(f"[WORKER] Error logging fetch: {e}", exc_info=True)
 
 def old_process_json_array(json_array):
     """
@@ -134,17 +135,17 @@ def extract_schema_data_from_url(url, content_type=None):
     """
     try:
         # Fetch content
-        print(f"[WORKER] Fetching {url}")
+        logger.info(f"[WORKER] Fetching {url}")
         response = requests.get(url, timeout=30)
         status_code = response.status_code
         content_length = len(response.content)
 
         response.raise_for_status()
-        print(f"[WORKER] Fetched {url}: {status_code} status, {content_length} bytes")
+        logger.info(f"[WORKER] Fetched {url}: {status_code} status, {content_length} bytes")
 
         # Handle TSV format: URL\tJSON_STRING per line
         if content_type and 'tsv' in content_type.lower():
-            print(f"[WORKER] Parsing TSV format (tab-separated URL and JSON)")
+            logger.info(f"[WORKER] Parsing TSV format (tab-separated URL and JSON)")
             lines = response.text.strip().split('\n')
             unique_objects = {}
             
@@ -154,14 +155,14 @@ def extract_schema_data_from_url(url, content_type=None):
                     continue
                     
                 if '\t' not in line:
-                    print(f"[WORKER] Warning: Line {i} has no tab separator, skipping")
+                    logger.warning(f"[WORKER] Line {i} has no tab separator, skipping")
                     continue
                 
                 try:
                     # Split by tab: first part is URL, second part is JSON
                     parts = line.split('\t', 1)
                     if len(parts) != 2:
-                        print(f"[WORKER] Warning: Line {i} doesn't have exactly 2 parts, skipping")
+                        logger.warning(f"[WORKER] Line {i} doesn't have exactly 2 parts, skipping")
                         continue
                     
                     url_part, json_str = parts
@@ -179,11 +180,11 @@ def extract_schema_data_from_url(url, content_type=None):
                                 if obj_id not in unique_objects:  # Keep first occurrence
                                     unique_objects[obj_id] = graph_objects[i]
                     log_fetch(url, status_code, content_length, len(unique_objects))
-                    print(f"[WORKER] Extracted {len(unique_objects)} IDs from array in {url}")
+                    logger.info(f"[WORKER] Extracted {len(unique_objects)} IDs from array in {url}")
 
                     
                 except json.JSONDecodeError as e:
-                    print(f"[WORKER] Error parsing JSON on line {i}: {e}")
+                    logger.error(f"[WORKER] Error parsing JSON on line {i}: {e}")
                     continue
             return list(unique_objects.keys()), list(unique_objects.values())
         
@@ -191,7 +192,7 @@ def extract_schema_data_from_url(url, content_type=None):
         json_data = response.json()
 
         if type(json_data) is not dict and type(json_data) is not list:
-            print(f"[WORKER] No valid schema data found in {url}")
+            logger.warning(f"[WORKER] No valid schema data found in {url}")
             log_fetch(url, status_code, content_length, 0, error="No valid schema data found")
             return [], []
 
@@ -210,22 +211,22 @@ def extract_schema_data_from_url(url, content_type=None):
                     if obj_id not in unique_objects:  # Keep first occurrence
                         unique_objects[obj_id] = graph_objects[i]
         log_fetch(url, status_code, content_length, len(unique_objects))
-        print(f"[WORKER] Extracted {len(unique_objects)} IDs from array in {url}")
+        logger.info(f"[WORKER] Extracted {len(unique_objects)} IDs from array in {url}")
         return list(unique_objects.keys()), list(unique_objects.values())
 
     except requests.RequestException as e:
         error_msg = f"Request error: {str(e)}"
-        print(f"[WORKER] Error fetching {url}: {error_msg}")
+        logger.error(f"[WORKER] Error fetching {url}: {error_msg}")
         log_fetch(url, getattr(e.response, 'status_code', None) if hasattr(e, 'response') and e.response else None, 0, 0, error=error_msg)
         return [], []
     except ValueError as e:
         error_msg = f"JSON parse error: {str(e)}"
-        print(f"[WORKER] Error parsing JSON from {url}: {error_msg}")
+        logger.error(f"[WORKER] Error parsing JSON from {url}: {error_msg}")
         log_fetch(url, None, 0, 0, error=error_msg)
         return [], []
     except Exception as e:
         error_msg = f"Unexpected error: {str(e)}"
-        print(f"[WORKER] Unexpected error processing {url}: {error_msg}")
+        logger.error(f"[WORKER] Unexpected error processing {url}: {error_msg}", exc_info=True)
         log_fetch(url, None, 0, 0, error=error_msg)
         return [], []
     
@@ -238,53 +239,53 @@ def process_job(conn, job):
         # Extract user_id from job
         user_id = job.get('user_id')
         if not user_id:
-            print(f"[WORKER] WARNING: Job missing user_id, skipping: {job}")
+            logger.warning(f"[WORKER] Job missing user_id, skipping: {job}")
             return False
 
         if job['type'] == 'process_file':
-            print(f"[WORKER] ========== Starting process_file for {job['file_url']} ==========")
-            print(f"[WORKER] Job details - site: {job.get('site')}, user_id: {user_id}")
+            logger.info(f"[WORKER] ========== Starting process_file for {job['file_url']} ==========")
+            logger.info(f"[WORKER] Job details - site: {job.get('site')}, user_id: {user_id}")
 
             # Check if the file still exists in the files table for this user
             cursor = conn.cursor()
             cursor.execute("SELECT file_url FROM files WHERE file_url = %s AND user_id = %s", (job['file_url'], user_id))
             if not cursor.fetchone():
-                print(f"[WORKER] File no longer exists in database, skipping: {job['file_url']}")
+                logger.info(f"[WORKER] File no longer exists in database, skipping: {job['file_url']}")
                 return True  # Job completed successfully (file was deleted)
 
-            print(f"[WORKER] File exists in database, proceeding with extraction")
+            logger.info(f"[WORKER] File exists in database, proceeding with extraction")
 
             # Use existing extract_schema_data_from_url which returns (ids, objects)
-            print(f"[WORKER] Calling extract_schema_data_from_url for {job['file_url']}")
+            logger.info(f"[WORKER] Calling extract_schema_data_from_url for {job['file_url']}")
             try:
                 ids, objects = extract_schema_data_from_url(job['file_url'], job.get('content_type'))
             except Exception as e:
                 error_msg = f"Failed to extract schema data: {str(e)}"
-                print(f"[WORKER ERROR] {error_msg}")
+                logger.error(f"[WORKER ERROR] {error_msg}", exc_info=True)
                 db.log_processing_error(conn, job['file_url'], user_id, 'extraction_failed', error_msg, str(e.__class__.__name__))
                 return False
 
-            print(f"[WORKER] Extracted {len(ids)} IDs, {len(objects)} objects from {job['file_url']}")
+            logger.info(f"[WORKER] Extracted {len(ids)} IDs, {len(objects)} objects from {job['file_url']}")
 
             # Log if no IDs extracted
             if len(ids) == 0:
                 error_msg = "No schema.org objects with @id found in file"
-                print(f"[WORKER WARNING] {error_msg}")
+                logger.warning(f"[WORKER WARNING] {error_msg}")
                 db.log_processing_error(conn, job['file_url'], user_id, 'no_ids_found', error_msg, f"Objects: {len(objects)}")
                 # Continue processing - this might not be an error for some files
 
             if len(ids) > 0:
-                print(f"[WORKER] Sample IDs: {list(ids)[:3]}")
+                logger.info(f"[WORKER] Sample IDs: {list(ids)[:3]}")
             if len(objects) > 0:
-                print(f"[WORKER] Sample object @type: {objects[0].get('@type', 'unknown')}")
+                logger.info(f"[WORKER] Sample object @type: {objects[0].get('@type', 'unknown')}")
 
             # Update database state with the extracted IDs
-            print(f"[WORKER] Updating file_ids in database...")
+            logger.info(f"[WORKER] Updating file_ids in database...")
             added_ids, removed_ids = db.update_file_ids(conn, job['file_url'], user_id, set(ids))
 
-            print(f"[WORKER] DB update: {len(added_ids)} added, {len(removed_ids)} removed")
+            logger.info(f"[WORKER] DB update: {len(added_ids)} added, {len(removed_ids)} removed")
             if len(added_ids) > 0:
-                print(f"[WORKER] Sample added IDs: {list(added_ids)[:3]}")
+                logger.info(f"[WORKER] Sample added IDs: {list(added_ids)[:3]}")
 
             # Collect items to batch add to vector DB
             items_to_add = []
@@ -300,40 +301,40 @@ def process_job(conn, job):
                         obj_type = obj.get('@type', '')
                         if obj_type == 'BreadcrumbList' or (isinstance(obj_type, list) and 'BreadcrumbList' in obj_type):
                             skipped_breadcrumbs += 1
-                            print(f"[WORKER] Skipping BreadcrumbList item: {id}")
+                            logger.info(f"[WORKER] Skipping BreadcrumbList item: {id}")
                             continue
                         items_to_add.append((id, job['site'], obj))
                     else:
-                        print(f"[WORKER] WARNING: Could not find object for ID {id}")
+                        logger.warning(f"[WORKER] Could not find object for ID {id}")
                 else:
                     skipped_existing += 1
 
             if skipped_existing > 0:
-                print(f"[WORKER] Skipped {skipped_existing} IDs that already exist in other files")
+                logger.info(f"[WORKER] Skipped {skipped_existing} IDs that already exist in other files")
             if skipped_breadcrumbs > 0:
-                print(f"[WORKER] Skipped {skipped_breadcrumbs} BreadcrumbList items")
+                logger.info(f"[WORKER] Skipped {skipped_breadcrumbs} BreadcrumbList items")
 
             # Batch add to vector DB
             if items_to_add:
-                print(f"[WORKER] Preparing to batch add {len(items_to_add)} items to vector DB")
-                print(f"[WORKER] Sample items to add: {[(id, site) for id, site, _ in items_to_add[:3]]}")
+                logger.info(f"[WORKER] Preparing to batch add {len(items_to_add)} items to vector DB")
+                logger.info(f"[WORKER] Sample items to add: {[(id, site) for id, site, _ in items_to_add[:3]]}")
                 from vector_db import vector_db_batch_add
-                print(f"[WORKER] Calling vector_db_batch_add...")
+                logger.info(f"[WORKER] Calling vector_db_batch_add...")
                 try:
                     vector_db_batch_add(items_to_add)
-                    print(f"[WORKER] Successfully completed vector_db_batch_add for {len(items_to_add)} items")
+                    logger.info(f"[WORKER] Successfully completed vector_db_batch_add for {len(items_to_add)} items")
                     # Log the additions
                     for id, site, obj in items_to_add:
                         log_vector_db_addition(id, site, obj)
                 except Exception as e:
                     error_msg = f"Failed to add items to vector DB: {str(e)}"
-                    print(f"[WORKER ERROR] {error_msg}")
+                    logger.error(f"[WORKER ERROR] {error_msg}", exc_info=True)
                     import traceback
                     error_details = traceback.format_exc()
                     db.log_processing_error(conn, job['file_url'], user_id, 'vector_db_add_failed', error_msg, error_details)
                     # Don't return False - we still updated the IDs table, so mark as processed
             else:
-                print(f"[WORKER] No new items to add to vector DB (all IDs already exist)")
+                logger.info(f"[WORKER] No new items to add to vector DB (all IDs already exist)")
 
             # Collect IDs to batch delete from vector DB
             ids_to_delete = []
@@ -345,51 +346,49 @@ def process_job(conn, job):
 
             # Batch delete from vector DB
             if ids_to_delete:
-                print(f"[WORKER] Batch deleting {len(ids_to_delete)} items from vector DB")
-                from vector_db import vector_db_batch_delete
+                logger.info(f"[WORKER] Batch deleting {len(ids_to_delete)} items from vector DB")
                 vector_db_batch_delete(ids_to_delete)
 
             # Update the site's last_processed timestamp (Note: may need user_id in future)
-            print(f"[WORKER] Updating site last_processed timestamp for {job['site']}")
+            logger.info(f"[WORKER] Updating site last_processed timestamp for {job['site']}")
             update_site_last_processed(job['site'])
 
             # Clear any previous errors for this file since it processed successfully
             db.clear_file_errors(conn, job['file_url'], user_id)
 
-            print(f"[WORKER] ========== Completed process_file for {job['file_url']} ==========")
+            logger.info(f"[WORKER] ========== Completed process_file for {job['file_url']} ==========")
             return True
 
         elif job['type'] == 'process_removed_file':
-            print(f"[WORKER] Processing removal: {job['file_url']}")
+            logger.info(f"[WORKER] Processing removal: {job['file_url']}")
 
             # Get IDs that were in this file for this user
             ids = db.get_file_ids(conn, job['file_url'], user_id)
-            print(f"[WORKER] Found {len(ids)} IDs to check for removal")
+            logger.info(f"[WORKER] Found {len(ids)} IDs to check for removal")
 
             # Remove all ID mappings for this file (deletes from ids table)
             db.update_file_ids(conn, job['file_url'], user_id, set())
 
             # Check each ID to see if it's gone globally (for this user)
-            removed_from_vector_db = 0
-            for id in ids:
-                if db.count_id_references(conn, id, user_id) == 0:
-                    # ID no longer exists in any file - remove from vector DB
-                    print(f"[WORKER] Removing from vector DB: {id}")
-                    vector_db_delete(id)
-                    removed_from_vector_db += 1
+            absent_ids = [ id for id in ids if db.count_id_references(conn, id, user_id) == 0 ]
+            for ibatch in range(0, len(absent_ids), MAX_BATCH_DELETE_IDS):
+                batch = absent_ids[ibatch:ibatch+MAX_BATCH_DELETE_IDS]
+                logger.info(f"[WORKER] Removing {len(batch)} IDs (batch {(ibatch // MAX_BATCH_DELETE_IDS) + 1}/{(len(absent_ids) + MAX_BATCH_DELETE_IDS - 1) // MAX_BATCH_DELETE_IDS}) from vector DB")
+                vector_db_batch_delete(batch)
 
-            print(f"[WORKER] Removed {removed_from_vector_db} items from vector DB")
+            removed_from_vector_db = len(absent_ids)
+            logger.info(f"[WORKER] Removed {removed_from_vector_db} items from vector DB")
 
             # Now delete the file from the files table for this user
             cursor = conn.cursor()
             cursor.execute("DELETE FROM files WHERE file_url = %s AND user_id = %s", (job['file_url'], user_id))
             conn.commit()
-            print(f"[WORKER] Deleted file from files table: {job['file_url']}")
+            logger.info(f"[WORKER] Deleted file from files table: {job['file_url']}")
 
             return True
 
     except Exception as e:
-        print(f"[ERROR] Job failed: {e}")
+        logger.error(f"[ERROR] Job failed: {e}", exc_info=True)
         import traceback
         traceback.print_exc()
         return False
@@ -415,7 +414,7 @@ def worker_loop():
     global worker_status
 
     # Get queue implementation
-    queue = get_queue()
+    queue = get_queue_from_env()
 
     conn = None
 
@@ -439,15 +438,15 @@ def worker_loop():
 
             if not conn:
                 conn = db.get_connection()
-                print("[WORKER] Database connection established")
+                logger.info("[WORKER] Database connection established")
 
             return conn
         except Exception as e:
-            print(f"[WORKER] Error getting database connection: {e}")
+            logger.error(f"[WORKER] Error getting database connection: {e}", exc_info=True)
             return None
 
     try:
-        print("[WORKER] Started worker with queue type:", os.getenv('QUEUE_TYPE', 'file'))
+        logger.info("[WORKER] Started worker with queue type: %s", queue.__class__.__name__)
         worker_status['status'] = 'running'
 
         # Track when we last logged queue status
@@ -465,7 +464,7 @@ def worker_loop():
                     if hasattr(queue, 'get_message_count'):
                         count = queue.get_message_count()
                         if count >= 0:
-                            print(f"[QUEUE STATUS] Approximate messages in queue: {count}")
+                            logger.info(f"[QUEUE STATUS] Approximate messages in queue: {count}")
                     last_queue_status_time = current_time
 
                 message = queue.receive_message(visibility_timeout=300)  # 5 minute timeout
@@ -477,14 +476,14 @@ def worker_loop():
                 job = message.content
                 worker_status['status'] = 'processing'
                 worker_status['current_job'] = job
-                print(f"[WORKER] Processing: {job.get('file_url', job.get('type', 'unknown'))}")
+                logger.info(f"[WORKER] Processing: {job.get('file_url', job.get('type', 'unknown'))}")
 
                 # Get fresh connection for each job
                 conn = get_db_connection()
                 if not conn:
-                    print(f"[WORKER] Cannot connect to database, returning job to queue")
+                    logger.error(f"[WORKER] Cannot connect to database, returning job to queue")
                     if not queue.return_message(message):
-                        print(f"[WORKER] Warning: Could not return message to queue")
+                        logger.warning(f"[WORKER] Could not return message to queue")
                     worker_status['current_job'] = None
                     time.sleep(10)  # Wait before retrying
                     continue
@@ -493,14 +492,14 @@ def worker_loop():
                 try:
                     success = process_job(conn, job)
                 except Exception as e:
-                    print(f"[WORKER] Error processing job: {e}")
-                    print(f"[WORKER] Full traceback:")
+                    logger.error(f"[WORKER] Error processing job: {e}", exc_info=True)
+                    logger.error(f"[WORKER] Full traceback:")
                     import traceback
                     traceback.print_exc()
-                    print(f"[WORKER] Job details: {json.dumps(job, indent=2)}")
+                    logger.error(f"[WORKER] Job details: {json.dumps(job, indent=2)}")
                     # Check if it's a connection error
                     if "Communication link failure" in str(e) or "08S01" in str(e):
-                        print(f"[WORKER] Database connection lost, will reconnect on next job")
+                        logger.error(f"[WORKER] Database connection lost, will reconnect on next job")
                         try:
                             conn.close()
                         except:
@@ -517,25 +516,25 @@ def worker_loop():
                     worker_status['total_jobs_processed'] += 1
                     # Delete message from queue
                     if not queue.delete_message(message):
-                        print(f"[WORKER] Warning: Could not delete message from queue")
+                        logger.warning(f"[WORKER] Could not delete message from queue")
                 else:
                     worker_status['total_jobs_failed'] += 1
                     # Return message to queue for retry
                     if not queue.return_message(message):
-                        print(f"[WORKER] Warning: Could not return message to queue")
+                        logger.warning(f"[WORKER] Could not return message to queue")
 
             except Exception as e:
-                print(f"[WORKER] Error in main loop iteration: {e}")
+                logger.error(f"[WORKER] Error in main loop iteration: {e}", exc_info=True)
                 worker_status['status'] = 'error'
                 worker_status['current_job'] = None
                 # Sleep before retrying to avoid tight error loops
                 time.sleep(5)
 
     except KeyboardInterrupt:
-        print("[WORKER] Shutdown requested")
+        logger.info("[WORKER] Shutdown requested")
         worker_status['status'] = 'stopped'
     except Exception as e:
-        print(f"[WORKER] Fatal error in worker loop: {e}")
+        logger.error(f"[WORKER] Fatal error in worker loop: {e}", exc_info=True)
         worker_status['status'] = 'crashed'
         import traceback
         traceback.print_exc()
@@ -547,81 +546,40 @@ def worker_loop():
                 pass
 
 if __name__ == '__main__':
+    match os.getenv('LOG_LEVEL', 'INFO').upper():
+        case 'DEBUG':
+            logger.setLevel(level=logging.DEBUG)
+        case 'WARNING':
+            logger.setLevel(level=logging.WARNING)
+        case 'ERROR':
+            logger.setLevel(level=logging.ERROR)
+        case _:
+            logger.setLevel(level=logging.INFO)
+
     # Test database connectivity first
-    print("[STARTUP] Testing database connection...")
+    logger.info("[STARTUP] Testing database connection...")
     try:
         test_conn = db.get_connection()
         test_conn.close()
-        print("[STARTUP] ✓ Database connection successful")
+        logger.info("[STARTUP] ✓ Database connection successful")
     except Exception as e:
-        print(f"[STARTUP] ✗ Database connection failed: {str(e)}")
+        logger.error(f"[STARTUP] ✗ Database connection failed: {str(e)}", exc_info=True)
         sys.exit(1)
 
-    # Test Queue connectivity
-    queue_type = os.getenv('QUEUE_TYPE', 'file')
-    if queue_type == 'servicebus':
-        print("[STARTUP] Testing Service Bus connection...")
-        try:
-            from azure.servicebus import ServiceBusClient
-            from azure.identity import DefaultAzureCredential
-
-            conn_str = os.getenv('AZURE_SERVICEBUS_CONNECTION_STRING')
-            namespace = os.getenv('AZURE_SERVICEBUS_NAMESPACE')
-            queue_name = os.getenv('AZURE_SERVICE_BUS_QUEUE_NAME', 'crawler-queue')
-
-            if conn_str:
-                client = ServiceBusClient.from_connection_string(conn_str)
-                print("[STARTUP] Using Service Bus connection string")
-            elif namespace:
-                credential = DefaultAzureCredential()
-                fully_qualified_namespace = namespace if '.servicebus.windows.net' in namespace else f"{namespace}.servicebus.windows.net"
-                client = ServiceBusClient(fully_qualified_namespace, credential)
-                print(f"[STARTUP] Using Azure AD auth for namespace: {fully_qualified_namespace}")
-            else:
-                print("[STARTUP] ✗ Service Bus not configured - no connection string or namespace found")
-                sys.exit(1)
-
-            # Test connection by peeking at queue
-            with client.get_queue_receiver(queue_name, max_wait_time=5) as receiver:
-                receiver.peek_messages(max_message_count=1)
-            print(f"[STARTUP] ✓ Service Bus connection successful (queue: {queue_name})")
-        except Exception as e:
-            print(f"[STARTUP] ✗ Service Bus connection failed: {str(e)}")
-            sys.exit(1)
-    elif queue_type == 'storage':
-        print("[STARTUP] Testing Storage Queue connection...")
-        try:
-            from azure.storage.queue import QueueServiceClient
-            from azure.identity import DefaultAzureCredential
-
-            storage_account = os.getenv('AZURE_STORAGE_ACCOUNT_NAME')
-            queue_name = os.getenv('AZURE_STORAGE_QUEUE_NAME', 'crawler-jobs')
-
-            if not storage_account:
-                print("[STARTUP] ✗ Storage Queue not configured - AZURE_STORAGE_ACCOUNT_NAME not set")
-                sys.exit(1)
-
-            account_url = f"https://{storage_account}.queue.core.windows.net"
-            credential = DefaultAzureCredential()
-            service_client = QueueServiceClient(account_url=account_url, credential=credential)
-            queue_client = service_client.get_queue_client(queue_name)
-
-            # Test connection by checking queue properties
-            queue_client.get_queue_properties()
-            print(f"[STARTUP] ✓ Storage Queue connection successful (queue: {queue_name})")
-
-            # Ensure queue exists (create if needed)
-            from queue_interface_storage import ensure_queue_exists
-            ensure_queue_exists(storage_account, queue_name)
-        except Exception as e:
-            print(f"[STARTUP] ✗ Storage Queue connection failed: {str(e)}")
-            sys.exit(1)
+    try:
+        logger.info(f"[STARTUP] Provisioning queue...")
+        queue = get_queue_from_env()
+        queue.provision()
+        logger.info(f"[STARTUP] ✓ Queue ({queue.__class__.__name__}) provisioned successfully")
+    except Exception as e:
+        logger.error(f"[STARTUP] ✗ Failed to provision queue: {str(e)}")
+        sys.exit(1)
 
     # Start status server in background thread
-    print("[STARTUP] Starting status server on port 8080...")
+    logger.info("[STARTUP] Starting status server on port 8080...")
     status_thread = threading.Thread(target=start_status_server, daemon=True)
     status_thread.start()
-    print("[STARTUP] ✓ Status server started")
+    logger.info("[STARTUP] ✓ Status server started")
 
     # Start worker loop
     worker_loop()

@@ -29,6 +29,10 @@ sys.path.insert(0, os.path.dirname(__file__))
 from embedding_provider.azure_oai_embedding import AzureOpenAIEmbedding
 
 
+# Maximum number of IDs Azure AI Search allows you to delete in a single batch
+MAX_BATCH_DELETE_IDS = 1000
+
+
 def extract_essential_fields(json_obj: dict) -> str:
     """
     Extract only essential fields from a schema.org object for embedding.

@@ -2,10 +2,11 @@
 Azure Storage Queue with Azure AD Authentication
 This version uses Workload Identity / Managed Identity instead of connection strings
 """
-import os
 import json
 from typing import Optional, Dict, Any
-from queue_interface import QueueInterface, QueueMessage
+from azure.core.exceptions import ResourceExistsError
+
+from .queue_interface import QueueInterface, QueueMessage
 
 
 class AzureStorageQueueAAD(QueueInterface):
@@ -28,6 +29,19 @@ class AzureStorageQueueAAD(QueueInterface):
         # Create queue service client
         self.service_client = QueueServiceClient(account_url=self.account_url, credential=self.credential)
         self.queue_client = self.service_client.get_queue_client(queue_name)
+
+    def provision(self):
+        """Ensure that the queue exists. If not, create it."""
+        self.queue_client.get_queue_properties()
+
+        try:
+            self.queue_client.create_queue()
+            print(f"[Queue] Created queue: {self.queue_name}")
+        except ResourceExistsError:
+            print(f"[Queue] Queue already exists: {self.queue_name}")
+        except Exception as e:
+            print(f"[Queue] Error creating queue: {e}")
+            raise
 
     def send_message(self, message: Dict[str, Any]) -> bool:
         """Send message to Storage Queue"""
@@ -90,43 +104,19 @@ class AzureStorageQueueAAD(QueueInterface):
         """Get approximate number of messages in queue"""
         try:
             properties = self.queue_client.get_queue_properties()
-            return properties.approximate_message_count
+            return properties.approximate_message_count  # type: ignore
         except Exception as e:
             print(f"[Storage Queue AAD] Error getting message count: {e}")
             return -1
 
 
-def ensure_queue_exists(storage_account_name: str, queue_name: str = 'crawler-jobs'):
-    """
-    Ensure the Azure Storage Queue exists, creating it if necessary.
-    This should be called once at application startup.
-    """
-    from azure.identity import DefaultAzureCredential
-    from azure.storage.queue import QueueServiceClient
-    from azure.core.exceptions import ResourceExistsError
+# def get_queue_with_aad():
+#     """Factory function to create queue with AAD authentication"""
+#     storage_account = os.getenv('AZURE_STORAGE_ACCOUNT_NAME')
+#     queue_name = os.getenv('AZURE_STORAGE_QUEUE_NAME', 'crawler-jobs')
 
-    account_url = f"https://{storage_account_name}.queue.core.windows.net"
-    credential = DefaultAzureCredential()
-    service_client = QueueServiceClient(account_url=account_url, credential=credential)
-    queue_client = service_client.get_queue_client(queue_name)
+#     if not storage_account:
+#         raise ValueError("AZURE_STORAGE_ACCOUNT_NAME environment variable not set")
 
-    try:
-        queue_client.create_queue()
-        print(f"[Queue] Created queue: {queue_name}")
-    except ResourceExistsError:
-        print(f"[Queue] Queue already exists: {queue_name}")
-    except Exception as e:
-        print(f"[Queue] Error creating queue: {e}")
-        raise
-
-
-def get_queue_with_aad():
-    """Factory function to create queue with AAD authentication"""
-    storage_account = os.getenv('AZURE_STORAGE_ACCOUNT_NAME')
-    queue_name = os.getenv('AZURE_STORAGE_QUEUE_NAME', 'crawler-jobs')
-
-    if not storage_account:
-        raise ValueError("AZURE_STORAGE_ACCOUNT_NAME environment variable not set")
-
-    print(f"[Queue] Using Azure Storage Queue with AAD authentication: {storage_account}")
-    return AzureStorageQueueAAD(storage_account, queue_name)
+#     print(f"[Queue] Using Azure Storage Queue with AAD authentication: {storage_account}")
+#     return AzureStorageQueueAAD(storage_account, queue_name)
