@@ -1,5 +1,6 @@
 import abc
 from typing import Optional, Dict, Any
+from dataclasses import dataclass
 
 
 class QueueMessage:
@@ -16,6 +17,11 @@ class QueueInterface(abc.ABC):
     @abc.abstractmethod
     def provision(self):
         """Ensure that the queue has all resources available and ready to use"""
+        pass
+
+    @abc.abstractmethod
+    def status(self) -> Dict[str, Any]:
+        """Get the current status of the queue"""
         pass
 
     @abc.abstractmethod

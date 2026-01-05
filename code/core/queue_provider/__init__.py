@@ -38,10 +38,16 @@ def get_queue_from_env() -> QueueInterface:
             # Use AAD authentication for Storage Queue
             storage_account = os.getenv('AZURE_STORAGE_ACCOUNT_NAME')
             queue_name = os.getenv('AZURE_STORAGE_QUEUE_NAME', 'crawler-jobs')
-            if not storage_account:
-                raise ValueError("AZURE_STORAGE_ACCOUNT_NAME environment variable not set")
-            print(f"[Queue] Using Azure Storage Queue with AAD authentication: {storage_account}")
-            return AzureStorageQueueAAD(storage_account, queue_name)
+            if storage_account:
+                print(f"[Queue] Using Azure Storage Queue with AAD authentication: {storage_account}")
+                return AzureStorageQueueAAD(storage_account, queue_name)
+
+            conn_str = os.getenv('AZURE_STORAGE_CONNECTION_STRING')
+            if not conn_str:
+                # Use Azurite default connection string for local dev
+                conn_str = "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;QueueEndpoint=http://127.0.0.1:10001/devstoreaccount1;"
+
+            return AzureStorageQueue(conn_str)
         
     raise ValueError(f"Unsupported QUEUE_TYPE: {queue_type}")
 

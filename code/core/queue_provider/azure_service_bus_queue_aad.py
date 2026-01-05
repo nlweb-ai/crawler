@@ -39,6 +39,40 @@ class AzureServiceBusQueueAAD(QueueInterface):
             )
         return self._client
 
+    def status(self) -> Dict[str, Any]:
+        status = {
+            'queue_type': 'servicebus',
+            'pending_jobs': 0,
+            'processing_jobs': 0,
+            'failed_jobs': 0,
+            'jobs': [],
+            'error': None
+        }
+        
+        client = self._get_client()
+
+        with client.get_queue_receiver(self.queue_name, max_wait_time=1) as receiver:
+            # Peek at messages without consuming
+            messages = receiver.peek_messages(max_message_count=50)
+            status['pending_jobs'] = len(messages)
+
+            for msg in messages[:20]:  # Limit to 20 for display
+                try:
+                    content = json.loads(str(msg))
+                    status['jobs'].append({
+                        'id': str(msg.message_id),
+                        'status': 'pending',
+                        'type': content.get('type'),
+                        'site': content.get('site'),
+                        'file_url': content.get('file_url'),
+                        'queued_at': content.get('queued_at'),
+                        'enqueued_time': str(msg.enqueued_time_utc) if msg.enqueued_time_utc else None
+                    })
+                except:
+                    pass
+
+        return status
+
     def provision(self):
         """Establish a connection to Service Bus, peeking the queue to verify."""
         client = self._get_client()

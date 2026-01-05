@@ -8,9 +8,7 @@ from .queue_interface import QueueMessage, QueueInterface
 class AzureStorageQueue(QueueInterface):
     """Azure Storage Queue implementation (works with Azurite)"""
 
-    DEFAULT_QUEUE_NAME = 'jobs'
-
-    def __init__(self, connection_string: str, queue_name: str = DEFAULT_QUEUE_NAME):
+    def __init__(self, connection_string: str, queue_name: str):
         from azure.storage.queue import QueueServiceClient
         self.connection_string = connection_string
         self.queue_name = queue_name
@@ -19,6 +17,38 @@ class AzureStorageQueue(QueueInterface):
         ).get_queue_client(queue_name)
 
         self.provision()
+
+    def status(self) -> Dict[str, Any]:
+        status = {
+            'queue_type': 'storage',
+            'pending_jobs': 0,
+            'processing_jobs': 0,
+            'failed_jobs': 0,
+            'jobs': [],
+            'error': None
+        }
+
+        properties = self.queue_client.get_queue_properties()
+        status['pending_jobs'] = properties.get('approximate_message_count', 0)
+
+        # Peek at messages
+        messages = self.queue_client.peek_messages(max_messages=20)
+        for msg in messages:
+            try:
+                content = json.loads(msg.content)
+                status['jobs'].append({
+                    'id': msg.id,
+                    'status': 'pending',
+                    'type': content.get('type'),
+                    'site': content.get('site'),
+                    'file_url': content.get('file_url'),
+                    'queued_at': content.get('queued_at'),
+                    'inserted_on': str(msg.inserted_on) if msg.inserted_on else None
+                })
+            except:
+                pass
+
+        return status
 
     def provision(self):
         '''Check if the queue is available by fetching its properties'''
