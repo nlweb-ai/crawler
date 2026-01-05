@@ -500,8 +500,7 @@ def get_status():
 @app.route('/api/queue/status', methods=['GET'])
 def get_queue_status():
     """Get queue processing status"""
-    queue = get_queue_from_env()
-    return jsonify(queue.status())
+    queue_type = os.getenv('QUEUE_TYPE', 'file')
 
     status = {
         'queue_type': queue_type,

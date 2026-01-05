@@ -30,38 +30,6 @@ class AzureStorageQueueAAD(QueueInterface):
         self.service_client = QueueServiceClient(account_url=self.account_url, credential=self.credential)
         self.queue_client = self.service_client.get_queue_client(queue_name)
 
-    def status(self) -> Dict[str, Any]:
-        status = {
-            'queue_type': 'storage',
-            'pending_jobs': 0,
-            'processing_jobs': 0,
-            'failed_jobs': 0,
-            'jobs': [],
-            'error': None
-        }
-
-        properties = self.queue_client.get_queue_properties()
-        status['pending_jobs'] = properties.get('approximate_message_count', 0)
-
-        # Peek at messages
-        messages = self.queue_client.peek_messages(max_messages=20)
-        for msg in messages:
-            try:
-                content = json.loads(msg.content)
-                status['jobs'].append({
-                    'id': msg.id,
-                    'status': 'pending',
-                    'type': content.get('type'),
-                    'site': content.get('site'),
-                    'file_url': content.get('file_url'),
-                    'queued_at': content.get('queued_at'),
-                    'inserted_on': str(msg.inserted_on) if msg.inserted_on else None
-                })
-            except:
-                pass
-
-        return status
-
     def provision(self):
         """Ensure that the queue exists. If not, create it."""
         self.queue_client.get_queue_properties()
