@@ -3,13 +3,13 @@ from flask_cors import CORS
 from flask_login import login_user, logout_user
 import db
 from master import process_site
-from queue_interface import get_queue
 import asyncio
 import os
 import time
 from datetime import datetime, timedelta
 import json
 import auth
+from get_queue import get_queue
 
 app = Flask(__name__, static_folder='static')
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'dev-secret-key-change-in-production')
@@ -352,8 +352,6 @@ def delete_site(site_url):
 
 def _delete_schema_map_internal(conn, site_url, user_id, schema_map_url):
     """Internal function to delete files for a schema_map and queue removal jobs"""
-    from queue_interface_aad import get_queue_with_aad
-
     cursor = conn.cursor()
 
     # Get all files for this schema_map before deleting
@@ -367,7 +365,7 @@ def _delete_schema_map_internal(conn, site_url, user_id, schema_map_url):
     # 1. Remove IDs from ids table
     # 2. Remove from vector DB
     # 3. Delete from files table
-    queue = get_queue_with_aad()
+    queue = get_queue()
     for file_url in files:
         job = {
             'type': 'process_removed_file',

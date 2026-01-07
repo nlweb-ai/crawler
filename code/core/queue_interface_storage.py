@@ -118,15 +118,3 @@ def ensure_queue_exists(storage_account_name: str, queue_name: str = 'crawler-jo
     except Exception as e:
         print(f"[Queue] Error creating queue: {e}")
         raise
-
-
-def get_queue_with_aad():
-    """Factory function to create queue with AAD authentication"""
-    storage_account = os.getenv('AZURE_STORAGE_ACCOUNT_NAME')
-    queue_name = os.getenv('AZURE_STORAGE_QUEUE_NAME', 'crawler-jobs')
-
-    if not storage_account:
-        raise ValueError("AZURE_STORAGE_ACCOUNT_NAME environment variable not set")
-
-    print(f"[Queue] Using Azure Storage Queue with AAD authentication: {storage_account}")
-    return AzureStorageQueueAAD(storage_account, queue_name)

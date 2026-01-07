@@ -6,7 +6,7 @@ from datetime import datetime
 import xml.etree.ElementTree as ET
 import config  # Load environment variables
 import db
-from queue_interface import get_queue
+from get_queue import get_queue
 
 # Queue history log file
 QUEUE_LOG_FILE = '/app/data/queue_history.jsonl'

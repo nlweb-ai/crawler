@@ -14,13 +14,7 @@ import config  # Load environment variables
 import db
 from vector_db import vector_db_add, vector_db_delete
 from scheduler import update_site_last_processed
-
-# Import appropriate queue interface based on QUEUE_TYPE
-queue_type = os.getenv('QUEUE_TYPE', 'file')
-if queue_type == 'storage':
-    from queue_interface_storage import get_queue_with_aad as get_queue
-else:
-    from queue_interface_aad import get_queue_with_aad as get_queue
+from get_queue import get_queue
 
 # Global worker status
 worker_status = {

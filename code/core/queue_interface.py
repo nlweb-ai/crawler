@@ -255,27 +255,3 @@ class AzureStorageQueue(QueueInterface):
             print(f"[StorageQueue] Error returning message: {e}")
             return False
 
-
-def get_queue() -> QueueInterface:
-    """Factory function to get appropriate queue implementation"""
-
-    queue_type = os.getenv('QUEUE_TYPE', 'file').lower()
-
-    if queue_type == 'file':
-        return FileQueue(os.getenv('QUEUE_DIR', 'queue'))
-
-    elif queue_type == 'servicebus':
-        conn_str = os.getenv('AZURE_SERVICEBUS_CONNECTION_STRING')
-        if not conn_str:
-            raise ValueError("AZURE_SERVICEBUS_CONNECTION_STRING not set")
-        return AzureServiceBusQueue(conn_str)
-
-    elif queue_type == 'storage':
-        conn_str = os.getenv('AZURE_STORAGE_CONNECTION_STRING')
-        if not conn_str:
-            # Use Azurite default connection string for local dev
-            conn_str = "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;QueueEndpoint=http://127.0.0.1:10001/devstoreaccount1;"
-        return AzureStorageQueue(conn_str)
-
-    else:
-        raise ValueError(f"Unknown queue type: {queue_type}")
